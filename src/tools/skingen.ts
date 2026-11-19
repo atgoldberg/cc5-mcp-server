@@ -132,7 +132,7 @@ export function registerSkinGenTools(server: McpServer, bridge: CC5Bridge, wait:
       "SELECTED layer; the layer is selected first), or delete. Address the layer by index or by name (names " +
       "must be unique; use skingen_state to see them). delete needs confirm_delete=true and a scope: " +
       "selected_layer (default), current_material or all_material; a confirmation window CC5 opens is NOT " +
-      "answered, it is reported with a screenshot for a person. Every call reads the result back and says " +
+      "answered by this tool, it is reported with a screenshot (answer it with click_ui_button when it is clear). Every call reads the result back and says " +
       "whether CC5 really changed.",
     {
       action: z.enum(["select", "show", "hide", "opacity", "delete"]).describe("What to do"),

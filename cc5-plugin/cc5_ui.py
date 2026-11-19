@@ -5,8 +5,9 @@ Built from what worked on 2026-10-26 (eyelash presets, SkinGen lip makeup; see
 docs/ui-automation-test-steps_ja.md):
 
   * answer the few question windows a script causes, and ONLY those (WINDOW_RULES);
-    licence / purchase / login / update / terms windows are never pressed, and while one is open
-    nothing is pressed at all;
+    windows about spending money (purchase, licence, activation, trial, ...) or accepting an
+    agreement are never pressed, and while one is open nothing is pressed at all (the word groups
+    MONEY_* and AGREEMENT_* below; login, update and delete windows are NOT in them since 2026-11-19);
   * long UI work runs as a "job": the bridge call returns at once and the work goes on in CC5's
     Qt event loop, one small step at a time, so the bridge keeps answering (list windows, read
     state) while a question window is open or CC5 is baking; other bridge commands are refused
@@ -41,7 +42,7 @@ BUSY_WORDS = ("baking", "please wait", "mipmap", "processing", "loading", "dynam
 
 MAX_TEXT_CHARS = 400                # window text returned to callers
 MAX_FULL_CHARS = 6000               # window text used for the safety check
-LONG_TEXT_CHARS = 600               # a text box this long is a licence / terms document
+LONG_TEXT_CHARS = 600               # a text box this long is a licence / terms document (AGREEMENT group)
 JOB_KEEP = 30                       # finished jobs kept for /ui/job
 JOB_STALE_SECONDS = 900             # a "running" job older than this (unless it says more) no longer blocks
 ANSWERER_MAX_SECONDS = 600          # the answering timer stops itself after this (jobs pass their own)
@@ -67,42 +68,78 @@ def norm(text: Any) -> str:
     return kept.casefold()
 
 
-# Stems matched at the start of a word (so 'industrial' does not match 'trial').
-_WORD_STEMS = (
-    "licen", "purchas", "repurchas", "buy", "log in", "log-in", "login", "logging in", "sign in", "sign-in",
-    "signin", "password", "passcode", "updat", "upgrad", "agree", "terms", "eula", "activat", "deactivat",
-    "reactivat", "subscri", "unsubscri", "payment", "checkout", "credit card", "trial", "serial", "register",
-    "renew", "redeem", "coupon", "unlock", "account", "bought", "billing", "invoice", "refund", "premium", "expire",
-    "product key", "authoriz", "membership", "voucher", "sign up", "log out", "logged", "lizenz", "kaufen", "passwort",
-    "aktualisier", "acheter", "mise a jour", "mot de passe", "comprar", "contrasena", "actualiz", "лицензи",
+# THE POLICY, in one place. A window (or a button, see cc5_uiclick.DENY_WORDS) is off limits only when
+# its text has a word of one of the two groups below. Everything else may be pressed.
+#
+# MONEY (2026-11-19: the owner relaxed the list to money only). Spending, or committing to spend:
+# buying, ordering, paying, prices, credits, subscriptions, paid upgrades, trials (they can turn into
+# paid), and licences / activation / serials (an activation is a limited, paid entitlement).
+# Delete, remove, login / sign in, password, account, register, update, unlock, ... were on the list
+# before that date and are NOT any more: do not put them back without the owner's word.
+#
+# Stems, matched at the start of a word (so 'industrial' does not match 'trial').
+MONEY_STEMS = (
+    "licen", "purchas", "repurchas", "buy", "bought", "checkout", "subscri", "unsubscri", "payment", "billing",
+    "invoice", "refund", "premium", "membership", "upgrad", "activat", "deactivat", "reactivat", "trial",
+    "serial", "product key", "authoriz", "renew", "redeem", "coupon", "voucher", "credit card", "da point",
+    "ai point", "lizenz", "kaufen", "acheter", "comprar", "лицензи",
 )
+# Short words, matched as whole words only, with an optional plural s ('cart' is not 'cartoon',
+# 'order' is not 'border', 'pay' is not 'display').
+MONEY_WORDS = ("pay", "paid", "price", "pricing", "order", "cart", "credit")
 # Strong stems also searched with spaces and punctuation removed ('Lic ense', 'Lic<b>ense</b>').
-_COMPACT_STEMS = ("licen", "purchas", "password", "login", "subscri", "payment", "checkout", "eula")
-# Japanese: no word boundaries, matched anywhere (after norm(), which drops the dakuten marks).
-_JAPANESE_STEMS = ("ライセンス", "購入", "購買", "ログイン", "サインイン", "更新", "アップデート", "規約", "同意",
-                   "決済", "支払", "認証", "有効化", "アクティベ", "試用", "体験版", "パスワード", "シリアル",
-                   "登録", "会員", "課金", "契約",
-                   "라이선스", "구매", "로그인", "비밀번호", "업데이트", "许可证", "授权", "购买", "登录", "密码")
+MONEY_COMPACT_STEMS = ("licen", "purchas", "subscri", "payment", "checkout")
+# Japanese / Korean / Chinese: no word boundaries, matched anywhere (after norm(), which drops the dakuten marks).
+MONEY_CJK = ("ライセンス", "購入", "購買", "決済", "支払", "課金", "クレジット", "有効化", "アクティベ", "試用",
+             "体験版", "シリアル", "会員", "라이선스", "구매", "许可证", "授权", "购买")
 
-_WORD_RE = re.compile(r"(?<![a-z0-9])(?:" + "|".join(re.escape(norm(s)) for s in _WORD_STEMS) + ")")
-_COMPACT_NEEDLES = tuple(norm(s) for s in _COMPACT_STEMS)
-_JAPANESE_NEEDLES = tuple(norm(s) for s in _JAPANESE_STEMS)
+# AGREEMENT (2026-11-19: the lead's retained exception to the owner's money-only rule). Accepting terms,
+# an agreement or a EULA can carry payment obligations, so it stays with a person. This is ONE group on
+# purpose: to drop the exception, empty these three tuples (and see LONG_TEXT_CHARS in describe_window).
+AGREEMENT_STEMS = ("agree", "terms", "eula")
+AGREEMENT_COMPACT_STEMS = ("eula",)
+AGREEMENT_CJK = ("規約", "同意", "契約")
+
+
+def _stem_re(stems: tuple[str, ...], words: tuple[str, ...] = ()) -> Any:
+    parts = [re.escape(norm(s)) for s in stems]
+    if words:
+        parts.append("(?:" + "|".join(re.escape(norm(w)) for w in words) + ")s?(?![a-z0-9])")
+    return re.compile(r"(?<![a-z0-9])(?:" + "|".join(parts) + ")") if parts else None
+
+
+# (group name, word regex, compact needles, anywhere needles); MONEY is looked at first.
+_GROUPS = (
+    ("money", _stem_re(MONEY_STEMS, MONEY_WORDS), tuple(norm(s) for s in MONEY_COMPACT_STEMS),
+     tuple(norm(s) for s in MONEY_CJK)),
+    ("agreement", _stem_re(AGREEMENT_STEMS), tuple(norm(s) for s in AGREEMENT_COMPACT_STEMS),
+     tuple(norm(s) for s in AGREEMENT_CJK)),
+)
+POLICY_SUMMARY = ("spending money (points, buying, ordering, paying, prices, credits, subscriptions, paid upgrades, "
+                  "trials, licences / activation) or accepting terms / an agreement")
+
+
+def forbidden_match(*parts: Any) -> tuple[str, str] | None:
+    """(word, group) for the first MONEY or AGREEMENT word in the text, or None. group is "money" or "agreement"."""
+    text = norm(" ".join(str(p) for p in parts if p))
+    compact = re.sub(r"[\W_]+", "", text)
+    for group, word_re, compact_needles, anywhere in _GROUPS:
+        match = word_re.search(text) if word_re is not None else None
+        if match:
+            return match.group(0).strip(), group
+        for needle in compact_needles:
+            if needle in compact:
+                return needle, group
+        for needle in anywhere:
+            if needle in text:
+                return needle, group
+    return None
 
 
 def forbidden_reason(*parts: Any) -> str | None:
-    """The word that makes a window off limits (licence, purchase, login, ...), or None."""
-    text = norm(" ".join(str(p) for p in parts if p))
-    match = _WORD_RE.search(text)
-    if match:
-        return match.group(0).strip()
-    compact = re.sub(r"[\W_]+", "", text)
-    for needle in _COMPACT_NEEDLES:
-        if needle in compact:
-            return needle
-    for needle in _JAPANESE_NEEDLES:
-        if needle in text:
-            return needle
-    return None
+    """The word that makes a window off limits (money or an agreement; see MONEY_* / AGREEMENT_*), or None."""
+    found = forbidden_match(*parts)
+    return found[0] if found else None
 
 
 # --- tiny helpers (patched in tests) -----------------------------------------------------
@@ -240,20 +277,18 @@ def describe_window(w: Any, q: Any = None) -> dict[str, Any]:
         elif label:
             buttons.append(label)
     other = _group_titles(w, q)
-    long_text, secret = False, False
+    long_text = False
     for cls in (q.QTextEdit, q.QPlainTextEdit):          # QTextBrowser is a QTextEdit
         for edit in _safe(lambda cls=cls: w.findChildren(cls), []):
             body = clean_text(_safe(edit.toPlainText, ""))
             other.append(body)
             long_text = long_text or len(body) > LONG_TEXT_CHARS
-    for line in _safe(lambda: w.findChildren(q.QLineEdit), []):
-        secret = secret or _safe(line.echoMode, q.QLineEdit.Normal) != q.QLineEdit.Normal
-        other.append(clean_text(_safe(line.placeholderText, "")))
+    for line in _safe(lambda: w.findChildren(q.QLineEdit), []):       # a password field alone (a login
+        other.append(clean_text(_safe(line.placeholderText, "")))    # window) no longer needs a person
     text = " ".join(labels)
     full = " ".join([title, text, *buttons, *(b["text"] for b in boxes), *other])
     squashed = " ".join(_squash_tags(_safe(c.text, "")) for c in _safe(lambda: w.findChildren(q.QLabel), []))
     needs_human = (forbidden_reason(full[:MAX_FULL_CHARS], squashed[:MAX_FULL_CHARS])
-                   or ("password field" if secret else None)
                    or ("long text (a licence or terms?)" if long_text else None)
                    or ("text too long to check" if len(full) > MAX_FULL_CHARS else None))
     full = full[:MAX_FULL_CHARS]
@@ -388,7 +423,8 @@ def decide(info: dict[str, Any], choices: dict[str, Any]) -> dict[str, Any] | No
         if rule.allowed is not None and not buttons <= rule.allowed:
             continue                            # a window of another shape that mentions the question
         if info.get("needs_human"):
-            return {"rule": rule.key, "blocked": f"window mentions '{info['needs_human']}': a person must decide"}
+            return {"rule": rule.key, "blocked": f"window mentions '{info['needs_human']}' (money or an "
+                                                 "agreement): a person must decide"}
         if not (_plain_english(info["title"]) and _plain_english(info.get("_full") or info["text"])):
             return {"rule": rule.key, "blocked": "the window text has characters outside plain English: a person must look"}
         want = rule.default if rule.key == "apply_preset" else choices.get(rule.key, rule.default)
@@ -698,9 +734,14 @@ def settle_steps(limit_s: float, choices: dict[str, Any], extra_ok: Callable[[],
 def settle_error(settled: dict[str, Any]) -> str:
     """One sentence for a settle_steps result that is not ok."""
     blocked = settled.get("blocked_by")
-    if blocked:
+    if blocked and blocked.get("needs_human"):
         return (f"a window needs a person: '{blocked['title']}' {blocked['text'][:120]!r} "
-                f"(buttons: {blocked['buttons']}). Not answered on purpose.")
+                f"(buttons: {blocked['buttons']}) mentions '{blocked['needs_human']}' (money or an agreement). "
+                "Not answered on purpose.")
+    if blocked:
+        return (f"a window this tool does not answer is open: '{blocked['title']}' {blocked['text'][:120]!r} "
+                f"(buttons: {blocked['buttons']}). It was left alone; look at it (list_cc5_windows) and, when the "
+                "answer is clear, press its button with click_ui_button.")
     return "CC5 was still busy when the time limit ran out"
 
 

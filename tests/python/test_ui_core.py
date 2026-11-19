@@ -18,18 +18,35 @@ from ui_support import UiTestCase, cc5_ui, fake_qt
 
 class ForbiddenWordsTest(unittest.TestCase):
     def test_plain_words(self) -> None:
-        for text in ("Software License", "Please purchase", "Login required", "Terms and Conditions",
-                     "Update available", "Activate your serial", "trial content", "Sign-in", "Log-in",
-                     "Licensing", "Deactivate this PC", "Unsubscribe", "Enter your password"):
+        for text in ("Software License", "Please purchase", "Terms and Conditions",
+                     "Activate your serial", "trial content", "Licensing", "Deactivate this PC", "Unsubscribe",
+                     "Buy now", "Place your order", "2 orders", "Checkout", "Your cart", "Costs 5 credits", "Credit card",
+                     "Pay", "You paid", "Payment", "Price: 5 USD", "Pricing", "Paid upgrade", "Use DA Points",
+                     "AI points left", "License Agreement", "I agree", "EULA"):
             self.assertIsNotNone(cc5_ui.forbidden_reason(text), text)
 
+    def test_words_that_are_allowed_since_2026_11_19(self) -> None:
+        for text in ("Login required", "Log-in", "Sign-in", "Sign up", "Enter your password", "Your account",
+                     "Update available", "Updating", "Register", "Unlock", "Expired", "Delete this layer?", "Remove",
+                     "Overwrite the file?", "Install", "Cartoon", "Border", "Reorder", "Display", "Payload",
+                     "Wrap points", "ログインしてください", "アップデート", "更新", "削除しますか", "パスワード", "登録",
+                     "Passwort", "Mise à jour disponible", "Contraseña", "로그인"):
+            self.assertIsNone(cc5_ui.forbidden_reason(text), text)
+
+    def test_the_group_of_a_word(self) -> None:
+        self.assertEqual(cc5_ui.forbidden_match("Please purchase"), ("purchas", "money"))
+        self.assertEqual(cc5_ui.forbidden_match("Add to cart"), ("cart", "money"))
+        self.assertEqual(cc5_ui.forbidden_match("Terms of Use"), ("terms", "agreement"))
+        self.assertEqual(cc5_ui.forbidden_match("License Agreement")[1], "money")        # MONEY is looked at first
+        self.assertIsNone(cc5_ui.forbidden_match("Log in to update or delete"))
+
     def test_disguised_words(self) -> None:
-        for text in ("LİCENSE", "LOGİN", "TRİAL", "Lic\u00adense", "Ｌｉｃｅｎｓｅ", "Lic ense", "Lic<b>ense</b>"):
+        for text in ("LİCENSE", "TRİAL", "Lic\u00adense", "Ｌｉｃｅｎｓｅ", "Lic ense", "Lic<b>ense</b>"):
             self.assertIsNotNone(cc5_ui.forbidden_reason(cc5_ui.clean_text(text)), text)
         self.assertIsNotNone(cc5_ui.forbidden_reason("unlicensed copy"))
 
     def test_japanese_words(self) -> None:
-        for text in ("ライセンスが切れています", "ログインしてください", "購入しますか", "利用規約に同意", "アップデート"):
+        for text in ("ライセンスが切れています", "購入しますか", "利用規約に同意", "お支払い", "クレジット", "体験版"):
             self.assertIsNotNone(cc5_ui.forbidden_reason(text), text)
 
     def test_the_windows_we_answer_are_not_forbidden(self) -> None:
@@ -91,7 +108,7 @@ class WindowScanTest(UiTestCase):
             lambda d: fake_qt.PushButton("Buy now", d),                                  # a button
             lambda d: fake_qt.CheckBox("I agree to the terms", d),                       # a check box
             lambda d: fake_qt.TextEdit(d, "END USER LICENSE AGREEMENT ..."),             # a text box
-            lambda d: fake_qt.GroupBox("Account login", d),                              # a group title
+            lambda d: fake_qt.GroupBox("Paid membership", d),                            # a group title
         ):
             dlg = fake_qt.Dialog(title="Apply Character Preset", visible=True)
             fake_qt.Label("Apply the preset?", dlg)
@@ -99,10 +116,16 @@ class WindowScanTest(UiTestCase):
             build(dlg)
             self.assertIsNotNone(cc5_ui.describe_window(dlg, self.q)["needs_human"])
 
-    def test_password_fields_and_long_documents_need_a_person(self) -> None:
+    def test_login_update_and_delete_windows_do_not_need_a_person(self) -> None:
+        for title, text in (("Login", "Log in with your account"), ("Update", "An update is available"),
+                            ("Delete", "Delete all layers?"), ("Confirm", "Overwrite the file?")):
+            info = cc5_ui.describe_window(self.dialog(title, text, ["OK", "Cancel"]), self.q)
+            self.assertIsNone(info["needs_human"], title)
+
+    def test_long_documents_need_a_person_and_a_password_field_alone_does_not(self) -> None:
         dlg = fake_qt.Dialog(title="Hello", visible=True)
         fake_qt.LineEdit(dlg, echo=fake_qt.LineEdit.Password)
-        self.assertEqual(cc5_ui.describe_window(dlg, self.q)["needs_human"], "password field")
+        self.assertIsNone(cc5_ui.describe_window(dlg, self.q)["needs_human"])
         dlg = fake_qt.Dialog(title="Hello", visible=True)
         fake_qt.TextEdit(dlg, "lorem ipsum " * 100)
         self.assertIn("long text", cc5_ui.describe_window(dlg, self.q)["needs_human"])
@@ -510,7 +533,14 @@ class SettleTest(UiTestCase):
         self.assertFalse(result["ok"])
 
     def test_settle_error_texts(self) -> None:
-        self.assertIn("needs a person", cc5_ui.settle_error({"blocked_by": {"title": "T", "text": "x", "buttons": ["OK"]}}))
+        unknown = cc5_ui.settle_error({"blocked_by": {"title": "Delete", "text": "Delete all?", "buttons": ["OK"],
+                                                      "needs_human": None}})
+        self.assertNotIn("person", unknown)
+        self.assertIn("does not answer", unknown)
+        self.assertIn("click_ui_button", unknown)
+        money = cc5_ui.settle_error({"blocked_by": {"title": "T", "text": "x", "buttons": ["OK"], "needs_human": "licen"}})
+        self.assertIn("needs a person", money)
+        self.assertIn("mentions 'licen'", money)
         self.assertIn("still busy", cc5_ui.settle_error({"blocked_by": None}))
 
 
@@ -549,7 +579,7 @@ class HardeningTest(UiTestCase):
         self.assertIsNotNone(cc5_ui.describe_window(dlg, self.q)["needs_human"])
 
     def test_words_split_by_tags_or_ampersands_are_still_found(self) -> None:
-        for text in ("Act<b>ivate</b> now", "Up<i>date</i> available", "b<b>uy</b> it", "Reg<b>ister</b>", "Act&ivate", "b&uy"):
+        for text in ("Act<b>ivate</b> now", "Up<i>grade</i> available", "b<b>uy</b> it", "Check<b>out</b>", "Act&ivate", "b&uy"):
             dlg = fake_qt.Dialog(title="Apply Character Preset", visible=True)
             fake_qt.Label(text, dlg)
             fake_qt.PushButton("Apply", dlg)
@@ -562,8 +592,8 @@ class HardeningTest(UiTestCase):
         self.assertEqual(cc5_ui.describe_window(dlg, self.q)["needs_human"], "text too long to check")
 
     def test_more_words_in_more_languages(self) -> None:
-        for text in ("You bought this", "Billing details", "Product key", "Lizenz abgelaufen", "Passwort", "Acheter maintenant",
-                     "Mise à jour disponible", "Comprar ahora", "Contraseña", "Лицензия", "라이선스", "로그인", "许可证", "购买"):
+        for text in ("You bought this", "Billing details", "Product key", "Lizenz abgelaufen", "Acheter maintenant",
+                     "Comprar ahora", "Лицензия", "라이선스", "许可证", "购买"):
             self.assertIsNotNone(cc5_ui.forbidden_reason(text), text)
 
     def test_look_alike_letters_mean_it_is_not_our_window(self) -> None:

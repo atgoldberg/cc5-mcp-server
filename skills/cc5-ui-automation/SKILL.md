@@ -15,20 +15,25 @@ layer". Everything goes through the cc5 MCP tools below (or `scripts/ui_client.p
 1. **Only three windows are ever answered by the tools**: `Apply Character Preset` / `Apply Eyelash Elements`
    (Apply), "add a new layer or replace the current layer?" (Replace, or Add with `layer_choice`),
    "exit SkinGen editing mode?" (Yes, or No). That is the whole list.
-2. **Any window about a licence, purchase, login, update, terms, activation, subscription, payment or trial is
-   never pressed**, and while one is open the tools press nothing. Delete / overwrite / unknown windows are
-   not answered either. When a tool says "a window is waiting for a person": stop, look at the picture it
-   returned (or `list_cc5_windows`), tell the owner in Japanese what it says, and wait. Never press it by
-   hand-made scripts, never type into it.
+2. **Any window about spending money** (points, buy / purchase, order, checkout, cart, credit, subscription,
+   payment, price, upgrade, trial, activation, licence) **or about accepting terms / an agreement / a EULA is
+   never pressed**, and while one is open the tools press nothing. When a tool says "a window is waiting for a
+   person": stop, look at the picture it returned (or `list_cc5_windows`), tell the owner in Japanese what it
+   says, and wait. Never press it by hand-made scripts, never type into it.
+   Since 2026-11-19 (the owner's money-only rule) **other windows are yours to handle**: delete / overwrite /
+   login / update / unknown windows are still not answered by `apply_preset` or the SkinGen tools (they stop
+   and report "a window this tool does not answer is open" with a picture), but you may then answer them with
+   `click_ui_button`. Read the window first: a delete or overwrite is pressed when you ask for it.
 3. Do not add answers to `WINDOW_RULES` (cc5_ui.py) without the owner's OK. Widening a title or a text match is
    how a wrong window gets pressed.
 4. `click_ui_button` presses ONE button you name. CC5 refuses (and presses nothing) any button or menu entry whose
-   text, objectName or tool tip mentions points / ポイント, buy / 購入 / purchase, delete / 削除 / remove, license /
-   licence / ライセンス / activate, upgrade, credit / クレジット, subscribe, pay / 支払 (and login, update, terms, trial,
-   ...); hidden, disabled or ambiguous buttons; anything while a licence / purchase / login window is open; anything
-   outside an open modal window. **A refusal is final**: never get around it (another route, `exec_python`, the
+   text, objectName or tool tip mentions money -- points / ポイント, buy / 購入 / purchase, order, checkout, cart,
+   credit / クレジット, subscribe, pay / 支払, price, upgrade, trial, activate, license / licence / ライセンス -- or
+   accepting terms / an agreement / a EULA; hidden, disabled or ambiguous buttons; anything while a money or
+   agreement window is open; anything outside an open modal window. Delete, remove, login and update buttons are
+   NOT refused any more (2026-11-19). **A refusal is final**: never get around it (another route, `exec_python`, the
    bridge directly, a different name for the same button). Tell the owner and wait. Do not edit `DENY_WORDS`
-   (cc5_uiclick.py) without the owner's OK. **One owner exception (2026-10-31):** inside the window titled "Body Wrap"
+   (cc5_uiclick.py) or the `MONEY_*` / `AGREEMENT_*` groups (cc5_ui.py) without the owner's OK. **One owner exception (2026-10-31):** inside the window titled "Body Wrap"
    the two buttons whose whole text is exactly "Generate Wrap Points" and "Align Points" can be pressed (they do not use
    AI points), and the 💾 menu entries (`menu_item`) "Save Wrap Points" / "Load Wrap Points" there (added the same day); a similar name ("AI Points"...) or any other deny word in the text, objectName or tool tip is still
    refused. A window the click opens is not answered: look at its picture and ask

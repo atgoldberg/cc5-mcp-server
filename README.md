@@ -11,15 +11,33 @@ CC5.2 に対応しています。作者は毎日 CC5.2 で使っています(5.2
 
 ## Local changes in this fork
 
-Branch `piqsiq` differs from upstream (commit `a790fd8`) in two ways:
+Branch `piqsiq` differs from upstream (commit `a790fd8`) in three ways:
 
 1. **New tool `select_ui_tab`** (route `POST /ui/tab`, plugin module `cc5-plugin/cc5_uitab.py`): lists the tabs of a
    tab widget inside a CC5 window, or brings ONE tab to the front with Qt's `setCurrentIndex()`. It exists because
    `click_ui_button` (rightly) refuses hidden buttons, and a button such as Modify > "Subdivide" sits on a tab
-   that may not be the front one. It never presses a button, answers a dialog or opens a menu, and keeps the same
-   refusals as `click_ui_button`. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab).
+   that may not be the front one. It never presses a button, answers a dialog or opens a menu, and has the same
+   word-based refusals as `click_ui_button`. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab).
 2. **`apply_preset` also accepts `.rlWrinkle`** (expression-wrinkle presets). Nothing that replaces the scene or the
    character was added to the list.
+3. **The word-based refusals are money-only (2026-11-19).** Upstream's UI automation refused every button and
+   window about points, buying, deleting / removing, licences, activation, upgrades, credits, subscriptions,
+   payment, login, update, terms, trial and more. In this fork the owner relaxed that: `click_ui_button` and
+   `select_ui_tab` refuse, and a window blocks all presses and is flagged "needs a person", only for
+   - **MONEY** -- spending or committing to spend: points, buy / purchase, order, checkout, cart, credit,
+     subscribe / subscription, pay / payment, price, (paid) upgrade, trial, activate / activation, licence /
+     license (and the Japanese words 購入, 支払, ライセンス, クレジット, ポイント, ...);
+   - **AGREEMENT** -- accepting terms / an agreement / a EULA. This group is the lead's retained exception (an
+     agreement can carry payment obligations); it is one named group so it can be removed later.
+
+   **Now allowed:** delete, remove, login / sign in (a password field too), update, register, account, unlock,
+   overwrite, install. A login or update window no longer blocks other presses. Unchanged: every structural
+   refusal (ambiguous, hidden or disabled target, a foreign modal window, unknown arguments, length caps), the
+   Body Wrap "points" exception, `skingen_layer`'s `confirm_delete`, `save_project`, the exec gate, and the three
+   windows that `apply_preset` / the SkinGen tools answer by themselves. The lists are in
+   `cc5-plugin/cc5_ui.py` (`MONEY_*`, `AGREEMENT_*`), `cc5-plugin/cc5_uiclick.py` (`DENY_WORDS`) and
+   `src/dialogs.ts` (`MONEY_PATTERNS`, `AGREEMENT_PATTERNS`). Note for readers of the upstream text: a delete or
+   overwrite button is pressed when asked, so read the window first.
 
 ## Architecture
 
@@ -137,9 +155,9 @@ The MCP server provides 101 tools (registered in 24 modules under `src/tools/`) 
 #### Pop-up (dialog) detection
 | Tool | Description |
 |------|-------------|
-| `list_dialogs` | List the dialogs currently open in CC5 and Reallusion Hub (title, body text, button labels, process, foreground) with a PNG of each when Windows can render it. **Read-only**; works even while CC5's main thread is blocked by a modal dialog. It never clicks. The only tool that presses a button by name is `click_ui_button` (below), and it refuses licence / purchase / delete / login buttons and presses nothing while such a window is open. |
+| `list_dialogs` | List the dialogs currently open in CC5 and Reallusion Hub (title, body text, button labels, process, foreground) with a PNG of each when Windows can render it. **Read-only**; works even while CC5's main thread is blocked by a modal dialog. It never clicks. The only tool that presses a button by name is `click_ui_button` (below), and it refuses buttons about spending money (purchase, payment, credits, upgrade, trial, activation, licence, ...) or accepting terms / an agreement, and presses nothing while such a window is open. |
 
-**Automatic warning (Japanese):** while a dialog is open, *every* tool result starts with `⚠ CC5 に小窓が出ています ...` (or `ℹ Reallusion Hub に小窓 ...`) showing title / body / buttons. Dialogs that look like agreements, purchases, logins, updates, deletes or overwrites are flagged "人が判断". Scans are cached ~4 s (about 1 s when a rescan is needed). Implemented by `scripts/list-dialogs.ps1` (EnumWindows + UI Automation), independent of the bridge. Set `CC5_DIALOG_WATCH=0` to disable, `CC5_DIALOG_WATCH_IGNORE_HUB=1` to hide Hub-only notices.
+**Automatic warning (Japanese):** while a dialog is open, *every* tool result starts with `⚠ CC5 に小窓が出ています ...` (or `ℹ Reallusion Hub に小窓 ...`) showing title / body / buttons. Dialogs about spending money (purchase, order, payment, price, credits, subscription, upgrade, trial, activation, licence) or accepting terms / an agreement are flagged "人が判断"; since 2026-11-19 login, update, delete and overwrite dialogs are not. Scans are cached ~4 s (about 1 s when a rescan is needed). Implemented by `scripts/list-dialogs.ps1` (EnumWindows + UI Automation), independent of the bridge. Set `CC5_DIALOG_WATCH=0` to disable, `CC5_DIALOG_WATCH_IGNORE_HUB=1` to hide Hub-only notices.
 
 #### UI automation: presets, SkinGen, windows, framed capture, one button, one tab (11) -- no mouse
 
@@ -147,17 +165,17 @@ See [UI automation without the mouse](#ui-automation-without-the-mouse) for how 
 
 | Tool | Description |
 |------|-------------|
-| `apply_preset` | Apply preset file(s) to the avatar with `RFileIO.LoadFile`: eyelash presets (`.ccAvatarPreset`), eyelash strips (`.rlEyelashElement`), SkinGen makeup (`.ccSkinGenPreset`), expression-wrinkle presets (`.rlWrinkle`), hair, cloth, ... (a fixed list of types; never a project, character or FBX). Answers only the known question windows (Apply Character Preset / Eyelash Elements, add-or-replace layer, exit SkinGen editing mode) and reports every other window with a screenshot. Reports what was added/removed in the scene |
+| `apply_preset` | Apply preset file(s) to the avatar with `RFileIO.LoadFile`: eyelash presets (`.ccAvatarPreset`), eyelash strips (`.rlEyelashElement`), SkinGen makeup (`.ccSkinGenPreset`), expression-wrinkle presets (`.rlWrinkle`), hair, cloth, ... (a fixed list of types; never a project, character or FBX). Answers only the known question windows (Apply Character Preset / Eyelash Elements, add-or-replace layer, exit SkinGen editing mode) and reports every other window with a screenshot (a money / agreement window is for a person; any other one can then be answered with `click_ui_button`). Reports what was added/removed in the scene |
 | `list_presets` | List preset files that are on disk, by category (`eyelash_preset`, `eyelash_element`, `makeup_lip`, `makeup_eye`, `makeup_eyelash`, ...) or `$/...` content folder; `names` shows which wanted presets are missing (cloud items are not on disk) |
 | `skingen_state` | Read the SkinGen editor: on/off, tab, layers (visible / HIDDEN, selected) and the selected layer's opacity |
 | `skingen_editor` | Turn the SkinGen editor on/off; off bakes (~10 s), answers "exit SkinGen editing mode?" and waits until CC5 is quiet |
-| `skingen_layer` | Select / show / hide / set opacity (0-100) / delete a SkinGen layer, by index or name; reads the result back. Delete needs `confirm_delete=true`; a confirmation window is never answered |
+| `skingen_layer` | Select / show / hide / set opacity (0-100) / delete a SkinGen layer, by index or name; reads the result back. Delete needs `confirm_delete=true`; a confirmation window is never answered by this tool (it is reported) |
 | `list_cc5_windows` | The pop-up / question windows CC5 has open right now, read inside CC5 with Qt: title, text, buttons, check boxes, progress or needs-a-person flags, plus a PNG of each (`QWidget.grab`). Read-only; works behind an ssh tunnel |
 | `get_ui_job` | Look at or wait for a job the tools above started (use the job id from a "Still running" reply) |
 | `find_ui_widgets` | Read-only finder for CC5's own Qt widgets by objectName / class / text, to discover names for new automation |
 | `capture_framed_crop` | Frame a preset view, render it big (default 3600 px) and cut a fixed box, so options are compared at the same scale (does not depend on `dolly_camera`) |
-| `click_ui_button` | Press ONE named button of a CC5 window, dialog or dock panel with Qt's `click()` (works while the Windows screen is locked), or one entry of its drop-down menu (`menu_item`). Refuses ambiguous, hidden or disabled buttons and every button about points (except Body Wrap's exact "Generate Wrap Points" and "Align Points" and the menu entries "Save Wrap Points" / "Load Wrap Points", the owner's exception of 2026-10-31), buying, deleting / removing, licences, activation, upgrades, credits, subscriptions or payment. Returns a picture of the window and the dialogs that are open; never answers a window it opened. See [Pressing one named button](#pressing-one-named-button-click_ui_button) |
-| `select_ui_tab` | List the tabs of a tab widget (QTabWidget / QTabBar) inside a CC5 window, dialog or dock panel (`list_only`: objectName, class, current index and every tab's index, text, tool tip, enabled / visible; read-only), or bring ONE tab to the front with Qt's `setCurrentIndex()`, named by `index`, `text` or `tooltip` (icon-only tabs have no text). Use it when `click_ui_button` says a button is hidden because its tab is not in front. Never presses a button, answers a dialog or opens a menu. Refuses ambiguous, hidden or disabled tabs, tabs whose text or tool tip trips the `click_ui_button` word list, and any switch while a licence / purchase / login window or a foreign modal window is open. Returns the index before and after, the tab labels, a picture of the window and the open dialogs. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab) |
+| `click_ui_button` | Press ONE named button of a CC5 window, dialog or dock panel with Qt's `click()` (works while the Windows screen is locked), or one entry of its drop-down menu (`menu_item`). Refuses ambiguous, hidden or disabled buttons and every button about spending money: points (except Body Wrap's exact "Generate Wrap Points" and "Align Points" and the menu entries "Save Wrap Points" / "Load Wrap Points", the owner's exception of 2026-10-31), buying, orders, checkout, cart, prices, licences, activation, upgrades, trials, credits, subscriptions or payment -- and accepting terms / an agreement. Delete, remove, login and update buttons are pressed (money-only since 2026-11-19). Returns a picture of the window and the dialogs that are open; never answers a window it opened. See [Pressing one named button](#pressing-one-named-button-click_ui_button) |
+| `select_ui_tab` | List the tabs of a tab widget (QTabWidget / QTabBar) inside a CC5 window, dialog or dock panel (`list_only`: objectName, class, current index and every tab's index, text, tool tip, enabled / visible; read-only), or bring ONE tab to the front with Qt's `setCurrentIndex()`, named by `index`, `text` or `tooltip` (icon-only tabs have no text). Use it when `click_ui_button` says a button is hidden because its tab is not in front. Never presses a button, answers a dialog or opens a menu. Refuses ambiguous, hidden or disabled tabs, tabs whose text or tool tip trips the `click_ui_button` word list, and any switch while a money / agreement window (purchase, licence, terms, ...) or a foreign modal window is open. Returns the index before and after, the tab labels, a picture of the window and the open dialogs. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab) |
 
 #### MetaHuman (2)
 | Tool | Description |
@@ -364,14 +382,22 @@ switch, the layer table. The steps to check each piece on a real CC5 are in
 | "...add a new layer or replace the current layer?" (buttons only Add / Replace / Cancel) | `Replace` or `Add` (`layer_choice`) |
 | "...exit SkinGen editing mode?" (buttons only Yes / No / Cancel) | `Yes` or `No` (`exit_answer`) |
 
-Everything else is left alone and reported (with a PNG): delete / overwrite questions, unknown
-windows, and **every window that mentions a licence, purchase, login, update, terms, activation,
-subscription, payment or trial** (the whole text of the window is checked: labels, buttons, check
-boxes, text boxes, group titles; case, accents, invisible characters, words split by tags or `&`, and
-Japanese / Korean / Chinese / German / French / Spanish / Russian words are covered; a password field,
-a long document or text too long to check also counts). A window we answer must be plain English
+Everything else is left alone by these tools and reported (with a PNG). Two kinds:
+
+- **A window that needs a person** -- every window about **spending money** (points, buy / purchase, order,
+  checkout, cart, credit, subscription, payment, price, upgrade, trial, activation, licence) or about **accepting
+  terms / an agreement / a EULA**. The whole text of the window is checked: labels, buttons, check boxes, text
+  boxes, group titles; case, accents, invisible characters, words split by tags or `&`, and Japanese / Korean /
+  Chinese / German / French / Spanish / Russian money words are covered; a long document or text too long to
+  check also counts. While such a window is open, nothing is pressed at all.
+- **Any other window** (delete / overwrite questions, login, update, unknown windows). The tool stops and
+  reports it; it does not block `click_ui_button`, which can then answer it. Since 2026-11-19 (the owner's
+  money-only rule) these are no longer "a person must decide" windows, and a password field alone no longer
+  counts.
+
+A window we answer must be plain English
 (look-alike letters from other scripts mean it is not ours), so a CC5 running in another UI language
-will not be answered. While a dialog that needs a person is open, nothing is pressed. Timers stop
+will not be answered. Timers stop
 themselves and never press the same window more than three times. The text of line edits and text
 boxes (mail addresses, keys, passwords) is never returned by `find_ui_widgets`.
 
@@ -430,17 +456,22 @@ bridge can press a button for you: tool `click_ui_button`, route `POST /ui/click
 
 - the window or button matches nothing, or more than one **visible** thing (hidden buttons never count and are never pressed);
 - the button or menu entry is disabled or hidden;
-- its text, objectName or tool tip contains one of these words (any case, also with spaces or tags inside the word):
-  `point` / `ポイント`, `buy` / `購入` / `purchase`, `delete` / `削除` / `remove`, `license` / `licence` / `ライセンス` / `activate`,
-  `upgrade`, `credit` / `クレジット`, `subscribe`, `pay` / `支払` -- or a word of the window safety list above (login, update, terms, trial, ...);
-- a window that needs a person (licence, purchase, login, ...) is open;
+- its text, objectName or tool tip is about **spending money** (any case, also with spaces or tags inside the word):
+  `point` / `ポイント`, `buy` / `購入` / `purchase`, `order`, `checkout`, `cart`, `credit` / `クレジット`, `subscribe`, `pay` / `payment` / `支払`, `price`, `upgrade`, `trial`, `activate`, `license` / `licence` / `ライセンス`;
+- or about **accepting terms / an agreement / a EULA** (`terms`, `agree...`, `eula`, `規約`, `同意`);
+- a window about money or an agreement (purchase, licence, activation, terms, ...) is open;
 - a modal window is open and the button is not in it (a person could not press it either);
 - the button opens a drop-down menu and no `menu_item` was given (the menu would stay open on a locked screen).
 
-**One start-up exception:** CC5's own box "Unsaved project data found. Would you like to update your project
-with the unsaved changes?" (buttons OK / Cancel) appears after CC5 was closed without saving. Its **Cancel** button
-may be pressed with `{"window": "Character Creator 5", "text": "Cancel"}`, although the text contains "update".
-Title, text and button set must match exactly; OK, and every other window, stay refused.
+**Not refused any more (2026-11-19, the owner's money-only rule):** `delete` / `削除` / `remove`, login / sign in,
+update, register, account, unlock and the like. Such a button is pressed when you name it, and a login or update
+window no longer blocks other presses. `order`, `cart`, `price`, `pay` and `credit` are matched as whole words in
+window text (so "Cartoon" and "Border" are fine, but a label such as "Sort Order" is refused).
+
+**The start-up box:** CC5's own box "Unsaved project data found. Would you like to update your project
+with the unsaved changes?" (buttons OK / Cancel) appears after CC5 was closed without saving. Press it with
+`{"window": "Character Creator 5", "text": "Cancel"}` (or `"OK"`; "update" is no refused word any more). The box
+is found although the main window has the same title.
 
 The click runs on CC5's main thread from a Qt timer, so if it opens a modal window (a file dialog, a
 question) the job still finishes: the reply says `click_returned: false` and lists that window with its
@@ -475,8 +506,8 @@ changes nothing) when:**
 - no visible tab widget is there, or more than one and `tab_widget` was not given (the candidates are listed; hidden tab widgets never count);
 - the index / text / tool tip matches no tab or several tabs (the tabs are listed);
 - the tab (or the whole tab widget) is disabled, or the tab is hidden (`isTabEnabled` / `isTabVisible`; a Qt without `isTabVisible` counts tabs as visible);
-- the tab's text or tool tip contains a word of the `click_ui_button` list above (`cc5_uiclick.deny_reason`);
-- a window that needs a person (licence, purchase, login, ...) is open;
+- the tab's text or tool tip contains a money / agreement word of the `click_ui_button` list above (`cc5_uiclick.deny_reason`);
+- a window about money or an agreement (purchase, licence, terms, ...) is open;
 - a modal window is open and the tab widget is not in it.
 
 It never presses a button, never answers a dialog and never opens a menu; a window that a tab switch opens is
@@ -495,10 +526,12 @@ forwards. Example: `{"window": "MainWindow", "tab_widget": "qtAttributeRootTab",
 - **指定のしかた**: `window` に窓・小窓・ドックの題名(大文字小文字は問わない)か objectName。ボタンは `object_name`(完全一致)か
   `text`(見えている文字の完全一致。大文字小文字と `&` は問わない)、または両方。▾ のメニューの中の項目は `menu_item` に項目の文字を書く。
 - **断るとき(何も押さない)**: 当たるものがない・見えているものが 2 つ以上ある。隠れている・灰色(無効)のボタンや項目。
-  文字・objectName・ツールチップに次の語があるもの: `point`/`ポイント`、`buy`/`購入`/`purchase`、`delete`/`削除`/`remove`、
-  `license`/`licence`/`ライセンス`/`activate`、`upgrade`、`credit`/`クレジット`、`subscribe`、`pay`/`支払`(ほかに login・update・
-  規約・体験版など、上の窓の安全の語も)。人が決める窓(ライセンス・購入・ログインなど)が開いている間。モーダルの窓が開いていて、
-  押すボタンがその中にないとき。▾ のメニューを持つボタンで `menu_item` がないとき。
+  文字・objectName・ツールチップに、お金にかかわる次の語があるもの: `point`/`ポイント`、`buy`/`購入`/`purchase`、`order`、
+  `checkout`、`cart`、`credit`/`クレジット`、`subscribe`、`pay`/`支払`、`price`、`upgrade`、`trial`(体験版)、`activate`、
+  `license`/`licence`/`ライセンス`。規約・同意(terms / agreement / EULA)にかかわるもの。お金や規約の窓(購入・ライセンス・
+  規約など)が開いている間。モーダルの窓が開いていて、押すボタンがその中にないとき。▾ のメニューを持つボタンで `menu_item` がないとき。
+- **2026-11-19 から断らないもの**: `delete`/`削除`/`remove`、ログイン、更新(update)など、お金と規約のほかの語。持ち主が
+  「お金にかかわるものだけ断る」と決めました。削除や上書きのボタンも押されるので、先に窓をよく読んでください。
 - **返すもの**: 押したもの、`click_returned`(押した結果の窓が開いたままなら false)、窓の絵、開いている小窓の一覧と絵。
   押した結果に開いた窓には**何も答えません**。絵を見て、決まった手順でないときは本人に聞いてください。
 

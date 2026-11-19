@@ -54,13 +54,36 @@ describe("parseScan", () => {
 describe("isSensitiveDialog", () => {
   it.each([
     ["License Agreement", [], []],
+    ["Activation", ["Activate this product"], []],
+    ["Store", ["Purchase this pack?"], ["Buy", "Cancel"]],
+    ["Store", ["Your order"], ["Checkout"]],
+    ["Store", ["2 items in your cart"], []],
+    ["Store", ["Price: 5 USD"], ["Pay"]],
+    ["Content", ["This costs 5 credits"], []],
+    ["Plan", ["Your subscription has ended"], []],
+    ["Info", ["A paid upgrade is available"], []],
+    ["Info", ["Start your free trial"], []],
+    ["Hub", ["Use DA Points?"], []],
+    ["Terms of Use", [], ["I Agree"]],
+    ["EULA", [], []],
+    ["購入", [], []],
+    ["確認", ["利用規約に同意しますか"], []],
+    ["確認", ["お支払い方法"], []],
+  ])("flags %s (money or an agreement)", (title, texts, buttons) => {
+    expect(isSensitiveDialog({ title, texts: texts as string[], buttons: buttons as string[] })).toBe(true);
+  });
+  it.each([
     ["Hub", ["今すぐアップデートしますか"], ["更新"]],
-    ["Login", ["Sign in to continue"], []],
+    ["Update", ["A new update is available"], ["Update", "Later"]],
+    ["Login", ["Sign in to continue", "Password"], ["Log in"]],
     ["Confirm", ["Overwrite existing file?"], ["Yes"]],
     ["確認", ["ファイルを上書きしますか"], []],
-    ["購入", [], []],
-  ])("flags %s", (title, texts, buttons) => {
-    expect(isSensitiveDialog({ title, texts: texts as string[], buttons: buttons as string[] })).toBe(true);
+    ["Delete", ["Delete all layers?"], ["Delete", "Cancel"]],
+    ["確認", ["削除しますか"], []],
+    ["Unsaved project", ["Save?"], ["Yes", "No"]],
+    ["Cartoon", ["Border", "Display"], ["Reorder"]],
+  ])("no longer flags %s (allowed since 2026-11-19)", (title, texts, buttons) => {
+    expect(isSensitiveDialog({ title, texts: texts as string[], buttons: buttons as string[] })).toBe(false);
   });
   it("does not flag a plain file-open dialog", () => {
     expect(isSensitiveDialog({ title: "開く", texts: ["ファイル名:"], buttons: ["開く", "キャンセル"] })).toBe(false);
@@ -80,8 +103,10 @@ describe("formatDialogWarning", () => {
     expect(w).toContain("Unsaved project");
     expect(w).toContain("Save?");
     expect(w).toContain("Yes | No");
-    expect(w).toContain("人が判断");
     expect(w).toContain("勝手に押さない");
+    expect(w).not.toContain("恐れ: 人が判断");                 // not about money or an agreement
+    const money = formatDialogWarning([dlg({ title: "Store", texts: ["Purchase this pack?"], buttons: ["Buy"] })])!;
+    expect(money).toContain("購入・支払い・ライセンス・規約への同意などの恐れ: 人が判断");
   });
   it("uses the info header for Hub-only dialogs", () => {
     const w = formatDialogWarning([dlg({ process: "Reallusion Hub", title: "x" })])!;

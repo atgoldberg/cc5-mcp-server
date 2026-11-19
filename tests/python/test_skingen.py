@@ -144,7 +144,8 @@ class EditorTest(UiTestCase):
         res = self.finish(cc5_skingen.ui_skingen_editor({"active": False}))
         self.assertFalse(res["success"])
         self.assertEqual(res["blocked_by"]["title"], "Save")
-        self.assertIn("needs a person", res["error"])
+        self.assertIn("does not answer", res["error"])
+        self.assertNotIn("person", res["error"])
 
     def test_the_answerer_is_stopped_afterwards(self) -> None:
         panel = Panel()

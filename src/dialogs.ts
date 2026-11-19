@@ -5,9 +5,10 @@
  * still answers /health but nothing executes. This module asks Windows directly (via
  * scripts/list-dialogs.ps1: EnumWindows + UI Automation), so it works while CC5 is stuck.
  *
- * It is READ-ONLY. Agreements, purchases, logins, updates, deletes and overwrites must be
- * decided by a human. The one tool that presses a button by name is click_ui_button
- * (cc5-plugin/cc5_uiclick.py), and it refuses exactly those buttons.
+ * It is READ-ONLY. Windows about spending money (purchase, licence, activation, ...) or accepting
+ * an agreement must be decided by a human. The one tool that presses a button by name is
+ * click_ui_button (cc5-plugin/cc5_uiclick.py), and it refuses exactly those buttons (the policy is
+ * written down at cc5-plugin/cc5_ui.py MONEY_STEMS / AGREEMENT_STEMS).
  */
 
 import { execFile } from "node:child_process";
@@ -80,20 +81,28 @@ export function parseScan(stdout: string): DialogScan {
 }
 
 // Dialogs a human must decide. Matched against title + body text + button labels.
-const SENSITIVE_PATTERNS: RegExp[] = [
-  /licen[sc]e/i, /agreement/i, /\beula\b/i, /terms/i, /privacy/i,
-  /purchase/i, /\bbuy\b/i, /checkout/i, /payment/i, /\border\b/i,
-  /log\s?in/i, /sign[\s-]?in/i, /password/i, /account/i, /activate/i,
-  /update/i, /upgrade/i, /install/i,
-  /delete/i, /overwrite/i, /replace/i, /unsaved/i,
-  /規約/, /同意/, /ライセンス/, /購入/, /支払/, /ログイン/, /サインイン/, /パスワード/,
-  /アカウント/, /アクティベ/, /更新/, /アップデート/, /アップグレード/, /インストール/,
-  /削除/, /上書き/, /置き換え/, /保存されていない/, /未保存/,
+// The same policy as cc5-plugin/cc5_ui.py (this list only labels a dialog; it presses nothing).
+//
+// MONEY (2026-11-19: the owner relaxed the list to money only): spending or committing to spend.
+// Login, password, account, update, install, delete, overwrite, replace and unsaved were flagged
+// before that date and are not any more.
+export const MONEY_PATTERNS: RegExp[] = [
+  /licen[sc]/i, /activat/i, /\bserial/i, /\btrial/i,
+  /purchas/i, /\bbuy/i, /\bbought\b/i, /checkout/i, /\bcarts?\b/i, /\borders?\b/i,
+  /\bpay\b/i, /\bpaid\b/i, /payment/i, /\bpric(?:e|es|ing)\b/i, /\bcredits?\b/i, /subscri/i, /upgrad/i,
+  /\b(?:da|ai) points?\b/i,
+  /ライセンス/, /購入/, /支払/, /決済/, /課金/, /クレジット/, /アクティベ/, /有効化/, /体験版/, /試用/, /アップグレード/,
+];
+// AGREEMENT (2026-11-19: the lead's retained exception to the money-only rule): accepting terms, an
+// agreement or a EULA can carry payment obligations. One group, so it can be removed in one place.
+export const AGREEMENT_PATTERNS: RegExp[] = [
+  /\bagree/i, /\beula\b/i, /\bterms\b/i, /privacy/i,
+  /規約/, /同意/, /契約/,
 ];
 
 export function isSensitiveDialog(d: Pick<DialogInfo, "title" | "texts" | "buttons">): boolean {
   const haystack = [d.title, ...d.texts, ...d.buttons].join("\n");
-  return SENSITIVE_PATTERNS.some((re) => re.test(haystack));
+  return [...MONEY_PATTERNS, ...AGREEMENT_PATTERNS].some((re) => re.test(haystack));
 }
 
 function clip(s: string, n: number): string {
@@ -111,7 +120,7 @@ export function describeDialog(d: DialogInfo): string {
   const flags = [
     d.foreground ? "前面" : null,
     d.modal ? "モーダル" : null,
-    isSensitiveDialog(d) ? "規約・購入・ログイン・更新・削除・上書きなどの恐れ: 人が判断" : null,
+    isSensitiveDialog(d) ? "購入・支払い・ライセンス・規約への同意などの恐れ: 人が判断" : null,
   ].filter(Boolean);
   return `[${d.process}] 「${clip(d.title, 80) || "(題名なし)"}」${body ? ` / ${body}` : ""} / ${buttons}${flags.length ? ` (${flags.join(", ")})` : ""}`;
 }
@@ -125,8 +134,8 @@ export function formatDialogWarning(dialogs: DialogInfo[]): string | null {
   const cc5 = shown.filter((d) => !isHub(d));
   const lines = shown.slice(0, 5).map((d) => `  - ${describeDialog(d)}`);
   const head = cc5.length > 0
-    ? `⚠ CC5 に小窓が出ています (${shown.length}件)。CC5 が止まっている/操作が実行されない可能性があります。先に人に確かめてください。ボタンを勝手に押さないでください。`
-    : `ℹ Reallusion Hub に小窓が出ています (${shown.length}件)。人に確かめてください。ボタンを勝手に押さないでください。`;
+    ? `⚠ CC5 に小窓が出ています (${shown.length}件)。CC5 が止まっている/操作が実行されない可能性があります。先に中身を確かめてください。「人が判断」と付いた小窓(購入・支払い・ライセンス・規約)は人に確かめ、ボタンを勝手に押さないでください。`
+    : `ℹ Reallusion Hub に小窓が出ています (${shown.length}件)。中身を確かめてください。「人が判断」と付いた小窓(購入・支払い・ライセンス・規約)は人に確かめ、ボタンを勝手に押さないでください。`;
   const more = shown.length > 5 ? `\n  ...ほか ${shown.length - 5} 件 (list_dialogs で全件)` : "";
   return `${head}\n${lines.join("\n")}${more}\n  詳しくは list_dialogs ツール (画像つき)。`;
 }

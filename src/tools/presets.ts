@@ -108,8 +108,11 @@ export function registerPresetTools(server: McpServer, bridge: CC5Bridge, wait: 
       "runs, ONLY these question windows are answered: 'Apply Character Preset' / 'Apply Eyelash Elements' " +
       "(Apply, with 'Restore neutral lash strip' ticked unless restore_neutral_lash=false), 'add a new layer or " +
       "replace the current layer?' (layer_choice, default replace) and 'exit SkinGen editing mode?' (Yes). " +
-      "Any other window (licence, purchase, login, update, terms, delete, overwrite, unknown) is NEVER pressed: " +
-      "it is reported with a screenshot and a person decides. A SkinGen preset opens the SkinGen editor, which " +
+      "Any other window is NEVER pressed by this tool: it stops and reports it with a screenshot. A window " +
+      "about spending money (purchase, payment, credits, subscription, upgrade, trial, activation, licence) " +
+      "or accepting terms / an agreement is for a person to decide; any other unknown window (delete, " +
+      "overwrite, login, update, ...) you may then answer with click_ui_button when the answer is clear. " +
+      "A SkinGen preset opens the SkinGen editor, which " +
       "hides hair, hat and the eyelash strips until skingen_editor active=false (bakes ~10 s). Files are applied " +
       "in order and the run stops at the first problem. Reports what was added/removed in the scene. " +
       "Find files with list_presets.",

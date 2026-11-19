@@ -31,10 +31,13 @@ describe("click_ui_button – registration", () => {
   it("registers one tool whose description names the refusals", () => {
     expect(server.tool).toHaveBeenCalledTimes(1);
     const description = server.tool.mock.calls[0][1] as string;
-    for (const word of ["locked", "points", "purchase", "delete", "licence", "activate", "upgrade", "credit",
-      "subscribe", "pay", "ポイント", "購入", "削除", "ライセンス", "クレジット", "支払", "modal", "menu_item"]) {
+    for (const word of ["locked", "points", "buy", "purchase", "order", "checkout", "cart", "credit", "subscribe",
+      "pay", "price", "upgrade", "trial", "activate", "licence", "terms", "agreement",
+      "ポイント", "購入", "ライセンス", "クレジット", "支払", "modal", "menu_item"]) {
       expect(description).toContain(word);
     }
+    expect(description).toContain("delete, remove, login and update buttons ARE pressed");
+    expect(description).not.toContain("削除");
   });
 
   it("schema: window is required, names are bounded, wait_ms is 200-15000", () => {

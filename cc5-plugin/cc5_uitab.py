@@ -22,8 +22,9 @@ What it refuses (nothing changes; the reason comes back as HTTP 400):
   * an index / text / tooltip that matches no tab or several tabs (the tabs are listed);
   * a disabled or hidden tab;
   * a tab whose text or tool tip contains a cc5_uiclick.DENY_WORDS word or a word of
-    cc5_ui.forbidden_reason (the same check as for buttons: cc5_uiclick.deny_reason);
-  * any selection while a window that needs a person is open (licence, purchase, login, ...), or
+    cc5_ui.forbidden_reason (the same check as for buttons: cc5_uiclick.deny_reason; money and
+    agreements only since 2026-11-19);
+  * any selection while a window about money or an agreement is open (purchase, licence, terms, ...), or
     while a modal window is open that the tab widget is not in (cc5_uiclick.blocking_reason).
 
 The checks live here, in CC5, because any local program can call the bridge: the MCP tool
@@ -190,9 +191,8 @@ def find_tab(holder: Any, p: dict[str, Any]) -> tuple[dict[str, Any] | None, str
     # the full strings are checked, not the shortened ones that are reported
     word = cc5_uiclick.deny_reason(_at(holder, "tabText", tab["index"], ""), _at(holder, "tabToolTip", tab["index"], ""))
     if word:
-        return None, (f"refused: the tab {_tab_desc(tab)} mentions '{word}'. Tabs about points, buying, deleting / "
-                      "removing, licences, activation, upgrades, credits, subscriptions or payment (and login / "
-                      "update / terms / trial) are opened by a person only. Ask the owner")
+        return None, (f"refused: the tab {_tab_desc(tab)} mentions '{word}'. Tabs about {cc5_ui.POLICY_SUMMARY} "
+                      "are opened by a person only. Ask the owner")
     return tab, None
 
 

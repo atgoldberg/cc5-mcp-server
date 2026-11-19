@@ -215,13 +215,33 @@ class RefusalTest(TabTestCase):
         self.assert_refused(self.tab(index=2), "disabled")
 
     def test_deny_words_in_the_text_or_the_tool_tip(self) -> None:
-        cases = (("Buy Content", ""), ("", "Purchase more"), ("License", ""), ("", "<b>Del</b>ete layers"),
-                 ("AI Points", ""), ("Log In", ""), ("", "Upgrade"), ("", "x" * 300 + " subscribe"))
+        cases = (("Buy Content", ""), ("", "<b>Pur</b>chase more"), ("License", ""), ("Activation", ""),
+                 ("AI Points", ""), ("Order", ""), ("", "Checkout"), ("Cart", ""), ("Credits", ""), ("", "Prices"),
+                 ("Free Trial", ""), ("", "Upgrade"), ("Payment", ""), ("Terms", ""), ("", "License Agreement"),
+                 ("", "x" * 300 + " subscribe"))
         for text, tip in cases:
             with self.subTest(text=text, tip=tip):
                 self.tabs._tabs[1] = (text, tip)
                 self.assert_refused(self.tab(index=1), "refused", "mentions")
         self.assertEqual(cc5_uiclick.deny_reason("Modify", "Texture"), None)
+
+    def test_delete_login_and_update_tabs_are_selected_now(self) -> None:
+        for text, tip in (("Delete", ""), ("", "Remove layers"), ("Log In", ""), ("", "Update"), ("Account", "")):
+            with self.subTest(text=text, tip=tip):
+                self.tabs._tabs[1] = (text, tip)
+                self.tabs._current = 0
+                self.assertTrue(self.run_tab(index=1)["success"])
+                self.assertEqual(self.tabs.currentIndex(), 1)
+
+    def test_a_login_or_update_window_does_not_block_but_a_purchase_window_does(self) -> None:
+        for title, text in (("Login", "Sign in to your account"), ("Update", "Update available")):
+            dlg = self.dialog(title, text, ["OK"])
+            self.tabs._current = 0
+            self.assertTrue(self.run_tab(index=2)["success"], title)
+            self.q.app.tops.remove(dlg)
+        self.tabs.set_calls.clear()
+        self.dialog("Store", "Purchase this pack?", ["Buy", "Cancel"])
+        self.assert_refused(self.tab(index=1), "a person must decide")
 
     def test_nothing_is_selected_while_a_window_needs_a_person(self) -> None:
         self.dialog("License", "Your license has expired", ["OK"])

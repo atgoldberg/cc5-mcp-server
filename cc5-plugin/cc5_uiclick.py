@@ -19,9 +19,11 @@ What it refuses (nothing is pressed; the reason comes back as HTTP 400):
     "Generate Wrap Points" / "Align Points", and the menu entries "Save Wrap Points" / "Load Wrap Points",
     are pressed; see POINT_EXCEPTION_BUTTONS / POINT_EXCEPTION_MENU_ENTRIES)
   * a button or menu entry whose text, objectName or tool tip contains a DENY_WORDS word (points,
-    buy, purchase, delete, remove, licence, activate, upgrade, credit, subscribe, pay and the
-    Japanese words) or a word of cc5_ui.forbidden_reason (login, update, terms, trial, ...);
-  * any click while a window that needs a person is open (licence, purchase, login, ...);
+    buy, purchase, licence, activate, upgrade, credit, subscribe, pay and the Japanese words) or a
+    word of cc5_ui.forbidden_reason (order, checkout, cart, price, trial, terms / agreement, ...).
+    Since 2026-11-19 only money and agreements are refused: delete, remove, login and update buttons
+    ARE pressed (the policy is written down once, at cc5_ui.MONEY_STEMS);
+  * any click while a window about money or an agreement is open (purchase, licence, activation, terms, ...);
   * a button outside the modal window that is open (a person could not press it either);
   * a button that opens a drop-down menu when no menu_item is given (the menu would stay open).
 
@@ -47,12 +49,14 @@ MAX_LISTED = 25                     # buttons / windows / menu entries named in 
 DIALOG_SHOT_WIDTH = 800
 ALLOWED_KEYS = frozenset({"window", "object_name", "text", "menu_item", "wait_ms", "screenshot", "max_width"})
 
-# Words that put a button or menu entry off limits (the commander's list, 2026-10-30). Matched
-# case-insensitively anywhere in the text, objectName and tool tip after cc5_ui.norm(); the longer ones
-# also with spaces and punctuation removed ('Pur chase', 'qtDeleteToolButton'). cc5_ui.forbidden_reason
-# (login, update, terms, trial, ...) is checked as well.
+# Words that put a button or menu entry off limits. MONEY only (2026-11-19: the owner relaxed the list
+# of 2026-10-30 to money only; "delete", "削除" and "remove" were taken out). Matched case-insensitively
+# ANYWHERE in the text, objectName and tool tip after cc5_ui.norm() (so 'qtBuyButton' counts); the
+# longer ones also with spaces and punctuation removed ('Pur chase'). The window word groups
+# cc5_ui.MONEY_* and cc5_ui.AGREEMENT_* (order, checkout, cart, price, trial, terms, agreement, ...)
+# are checked as well, through cc5_ui.forbidden_reason: the policy is described there.
 DENY_WORDS: tuple[str, ...] = (
-    "point", "ポイント", "buy", "購入", "purchase", "delete", "削除", "remove",
+    "point", "ポイント", "buy", "購入", "purchase",
     "license", "licence", "ライセンス", "activate", "upgrade", "credit", "クレジット",
     "subscribe", "pay", "支払",
 )
@@ -70,27 +74,25 @@ POINT_EXCEPTION_BUTTONS = frozenset({"generate wrap points", "align points"})
 POINT_EXCEPTION_MENU_ENTRIES = frozenset({"save wrap points", "load wrap points"})
 _POINT_WORDS = frozenset({"point", "ポイント"})
 
-# Owner-approved exception (2026-11-06): ONLY the Cancel button of CC5's start-up box below may be
-# pressed although its text says "update". Title, text and the set of buttons must match exactly;
-# the request must name this window and text "Cancel" (no menu_item).
+# CC5's start-up box below. Until 2026-11-19 only its Cancel button could be pressed (its text says
+# "update", which was a refused word then). "update" is allowed now, so both buttons can be pressed like
+# any other; what is left is the window lookup: the box has the same title as the main window, so a
+# request that names "Character Creator 5" while exactly this box is open means the box.
 UNSAVED_TITLE = "character creator 5"
 UNSAVED_TEXT = "unsaved project data found. would you like to update your project with the unsaved changes?"
 UNSAVED_BUTTONS = frozenset({"ok", "cancel"})
-UNSAVED_PRESS = "cancel"
 
 
 def _is_unsaved_box(info: dict[str, Any]) -> bool:
     return (label_key(info.get("title", "")) == UNSAVED_TITLE
             and label_key(info.get("text", "")) == UNSAVED_TEXT
-            and str(info.get("needs_human") or "").startswith("updat")   # forbidden_reason gives the stem
-            and cc5_ui.forbidden_reason(re.sub("update", " ", info.get("_full", ""), flags=re.I)) is None
+            and not info.get("needs_human")
             and not info.get("checkboxes")
             and {label_key(b) for b in info.get("buttons", [])} <= UNSAVED_BUTTONS)
 
 
-def _asks_unsaved_cancel(p: dict[str, Any]) -> bool:
-    return (label_key(p.get("window") or "") == UNSAVED_TITLE and p.get("text") is not None
-            and label_key(p["text"]) == UNSAVED_PRESS and p.get("menu_item") is None)
+def _asks_unsaved_box(p: dict[str, Any]) -> bool:
+    return label_key(p.get("window") or "") == UNSAVED_TITLE and p.get("menu_item") is None
 
 
 def _call(obj: Any, method: str, default: Any = None) -> Any:
@@ -174,16 +176,14 @@ def _top(w: Any) -> Any:
     return _call(w, "window") or w
 
 
-def blocking_reason(q: Any, scope: Any | None = None, unsaved_cancel: bool = False) -> str | None:
-    """Why nothing may be pressed now: a window that needs a person is open, or a modal window is open
-    and the target is not in it. None when pressing is allowed. unsaved_cancel: the request is the
-    owner's one exception (Cancel of the unsaved-data box); only that exact box is not counted."""
-    for info, w in cc5_ui.scan_windows():
-        if unsaved_cancel and _is_unsaved_box(info) and (scope is None or cc5_ui._same_widget(_top(scope), w)):
-            continue
+def blocking_reason(q: Any, scope: Any | None = None) -> str | None:
+    """Why nothing may be pressed now: a window about money or an agreement is open (it needs a person),
+    or a modal window is open and the target is not in it. None when pressing is allowed."""
+    for info, _w in cc5_ui.scan_windows():
         if info["needs_human"]:
-            return (f"the window '{info['title']}' mentions '{info['needs_human']}': a person must decide, and "
-                    "nothing is pressed while it is open. Show it to the owner (list_cc5_windows)")
+            return (f"the window '{info['title']}' mentions '{info['needs_human']}' (money or an agreement): a "
+                    "person must decide, and nothing is pressed while it is open. Show it to the owner "
+                    "(list_cc5_windows)")
     if scope is None:
         return None
     app = q.QApplication.instance()
@@ -297,9 +297,8 @@ def _target_problem(button: Any, menu_item: str | None,
     word = deny_reason(cc5_ui.label_text(button), _call(button, "objectName", ""), _call(button, "toolTip", ""),
                        skip_words=skip)
     if word:
-        return None, (f"refused: the button {_button_desc(button)} mentions '{word}'. Buttons about points, buying, "
-                      "deleting / removing, licences, activation, upgrades, credits, subscriptions or payment "
-                      "(and login / update / terms / trial) are pressed by a person only. Ask the owner")
+        return None, (f"refused: the button {_button_desc(button)} mentions '{word}'. Buttons about "
+                      f"{cc5_ui.POLICY_SUMMARY} are pressed by a person only. Ask the owner")
     menu = _call(button, "menu")
     if menu_item is None:
         if menu is not None:
@@ -314,8 +313,8 @@ def _target_problem(button: Any, menu_item: str | None,
     word = deny_reason(cc5_ui.label_text(entry), _call(entry, "objectName", ""), _call(entry, "toolTip", ""),
                        skip_words=skip)
     if word:
-        return None, (f"refused: the menu entry '{cc5_ui.label_text(entry)}' mentions '{word}'; it is pressed by "
-                      "a person only. Ask the owner")
+        return None, (f"refused: the menu entry '{cc5_ui.label_text(entry)}' mentions '{word}' (money or an "
+                      "agreement); it is pressed by a person only. Ask the owner")
     return entry, None
 
 
@@ -349,18 +348,18 @@ def read_args(body: dict[str, Any] | None) -> tuple[dict[str, Any] | None, str |
 def resolve(p: dict[str, Any]) -> dict[str, Any]:
     """{"window", "button", "target", "hidden_skipped"} for a request, or {"error"}."""
     q = cc5_ui._qt()
-    unsaved = _asks_unsaved_cancel(p)
-    blocked = blocking_reason(q, unsaved_cancel=unsaved)
+    unsaved = _asks_unsaved_box(p)
+    blocked = blocking_reason(q)
     if blocked:
         return {"error": blocked}
-    if unsaved:                                   # the main window shares the title: take the box only
+    if unsaved:                                   # the main window shares the title: take the box when it is open
         boxes = [w for info, w in cc5_ui.scan_windows() if _is_unsaved_box(info)]
         window, error = (boxes[0], None) if len(boxes) == 1 else find_window(q, p["window"])
     else:
         window, error = find_window(q, p["window"])
     if error:
         return {"error": error}
-    blocked = blocking_reason(q, window, unsaved_cancel=unsaved)
+    blocked = blocking_reason(q, window)
     if blocked:
         return {"error": blocked}
     button, error, hidden = find_button(q, window, p.get("object_name"), p.get("text"))

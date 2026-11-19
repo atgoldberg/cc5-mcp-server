@@ -49,7 +49,8 @@ export function registerUiWindowTools(server: McpServer, bridge: CC5Bridge, wait
     "list_cc5_windows",
     "Look at the pop-up / question windows CC5 has open RIGHT NOW, from inside CC5 (Qt): title, text, buttons, " +
       "check boxes, and whether it is a progress window (baking: wait), a known question that apply_preset / " +
-      "skingen_editor would answer, or a window that needs a person (licence, purchase, login, update, terms). " +
+      "skingen_editor would answer, or a window that needs a person (money: purchase, payment, credits, upgrade, trial, activation, licence; " +
+      "or accepting terms / an agreement). Login, update and delete windows are not flagged. " +
       "screenshot=true (default) also returns a PNG of each window (QWidget.grab), and target=main adds the main " +
       "window. Read-only: nothing is pressed. Works while a modal question is open, and when CC5 runs on another " +
       "machine behind a tunnel. Complements list_dialogs (which reads the desktop with Windows APIs).",

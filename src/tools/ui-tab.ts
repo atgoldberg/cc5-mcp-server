@@ -88,10 +88,11 @@ export function registerUiTabTools(server: McpServer, bridge: CC5Bridge, wait: W
       "Then give exactly ONE of index (0-based), text or tooltip (icon-only tabs have no text). It selects a " +
       "tab and does nothing else: it never presses a button, answers a dialog or opens a menu. CC5 refuses, " +
       "and changes nothing, when: no or more than one VISIBLE tab widget matches; no or more than one tab " +
-      "matches; the tab is disabled or hidden; its text or tool tip mentions points, buy, purchase, delete, " +
-      "remove, licence, activate, upgrade, credit, subscribe, pay (or ポイント 購入 削除 ライセンス クレジット " +
-      "支払), or login / update / terms / trial; a licence / purchase / login window is open; a modal window " +
-      "is open and the tab widget is not in it. After the switch it waits wait_ms, then returns the index " +
+      "matches; the tab is disabled or hidden; its text or tool tip is about spending money -- points, buy, " +
+      "purchase, order, checkout, cart, credit, subscribe, pay, price, upgrade, trial, activate, licence (or " +
+      "ポイント 購入 ライセンス クレジット 支払) -- or about accepting terms / an agreement; a window about " +
+      "those (purchase, licence, activation, terms) is open; a modal window is open and the tab widget is " +
+      "not in it. After the switch it waits wait_ms, then returns the index " +
       "before and after, the tab labels, a picture of the window and the dialogs that are open (never " +
       "answered). Do not use it to get past a refusal of another tool.",
     {

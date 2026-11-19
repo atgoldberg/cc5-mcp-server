@@ -362,7 +362,7 @@ def _delete(p: dict[str, Any]) -> Iterator[float]:
     baseline = cc5_ui.baseline_keys()
     cc5_ui._later(50, perform)                   # deferred: a menu / question may open
     yield 800
-    # Nothing is answered here: a confirmation window means a person decides.
+    # Nothing is answered here: a confirmation window is reported (the caller looks at it and decides).
     settled = yield from cc5_ui.settle_steps(30, {}, grace_s=2.5, answerable=False, baseline=baseline)
     now_table = _first(TABLE)
     after = now_table.rowCount() if now_table is not None else 0

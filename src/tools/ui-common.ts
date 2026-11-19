@@ -70,9 +70,18 @@ export function describeWindow(w: UiWindowInfo): string {
   return `'${w.title || "(no title)"}': ${bodyText.slice(0, 200)} | buttons: ${buttons}${boxes}${tail}`;
 }
 
-/** The text a tool shows when a window needs a person. */
+/**
+ * The text a tool shows when a window stopped it. Only a window about money or an agreement
+ * (needs_human) is a person's to decide; any other window was just not one this tool answers.
+ */
 export function windowNeedsPerson(w: UiWindowInfo): string {
-  return `⚠ A window is waiting for a person (not answered on purpose): ${describeWindow(w)}`;
+  if (w.needs_human) {
+    return `⚠ A window is waiting for a person (not answered on purpose): ${describeWindow(w)}`;
+  }
+  return (
+    `⚠ A window this tool does not answer is open (it was left alone): ${describeWindow(w)}\n` +
+    "Look at its picture; when the answer is clear, press its button with click_ui_button."
+  );
 }
 
 export function windowImages(windows: UiWindowInfo[] | undefined): ToolContent[] {

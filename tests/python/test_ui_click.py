@@ -126,12 +126,17 @@ class MatchingTest(ClickTestCase):
 
 
 class RefusalTest(ClickTestCase):
+    # group 1 of the policy of 2026-11-19: money (MONEY) and agreements (AGREEMENT)
     REFUSED = (
         "Generate AI Points", "Align Points (AI)", "Get AI Points", "Wrap Points", "ポイントを使う", "Buy Now", "ＢＵＹ", "購入する", "Purchase",
-        "pUrChAsE", "Pur chase", "Delete", "削除", "Remove Layer", "License", "Licence info", "ライセンス",
-        "Activate", "Deactivate", "Upgrade", "Credits", "クレジット", "Subscribe", "Pay", "支払い",
-        "Log In", "Update", "Terms of Use",
+        "pUrChAsE", "Pur chase", "Place Order", "Checkout", "Add to Cart", "Credits", "クレジット", "Subscribe",
+        "Subscription", "Pay", "Payment", "支払い", "Show Prices", "Upgrade", "Start Trial", "Activate", "Deactivate",
+        "Activation", "License", "Licence info", "ライセンス",
+        "Terms of Use", "I Agree", "Accept Agreement", "EULA", "規約に同意",
     )
+    # refused until 2026-11-19, pressed since (the owner's money-only rule)
+    ALLOWED = ("Delete", "削除", "Remove Layer", "Log In", "Login", "Sign in", "ログイン", "Update", "更新",
+               "Register", "Account", "Unlock", "Overwrite", "Install", "Cartoon", "Border", "Reorder")
 
     def test_every_deny_word_in_the_text_is_refused(self) -> None:
         for i, label in enumerate(self.REFUSED):
@@ -140,9 +145,21 @@ class RefusalTest(ClickTestCase):
                 self.assert_refused(self.click(object_name=f"qtB{i}"), "refused")
                 self.assertEqual(button.clicks, 0)
 
-    def test_deny_word_in_the_object_name_or_the_tool_tip(self) -> None:
+    def test_delete_login_update_and_the_like_are_pressed_now(self) -> None:
+        for i, label in enumerate(self.ALLOWED):
+            with self.subTest(label=label):
+                button = fake_qt.PushButton(label, self.win, name=f"qtA{i}")
+                result = self.run_click(object_name=f"qtA{i}")
+                self.assertTrue(result["success"], result)
+                self.assertEqual(button.clicks, 1)
         trash = fake_qt.ToolButton("", self.win, name="qtDeleteToolButton")
-        self.assert_refused(self.click(object_name="qtDeleteToolButton"), "mentions 'delete'")
+        trash._tooltip = "Remove the selected layer"
+        self.run_click(object_name="qtDeleteToolButton")
+        self.assertEqual(trash.clicks, 1)
+
+    def test_deny_word_in_the_object_name_or_the_tool_tip(self) -> None:
+        trash = fake_qt.ToolButton("", self.win, name="qtBuyToolButton")
+        self.assert_refused(self.click(object_name="qtBuyToolButton"), "mentions 'buy'")
         tip = fake_qt.PushButton("OK", self.win, name="qtOk")
         tip._tooltip = "<html><b>Pur</b>chase this item</html>"
         self.assert_refused(self.click(object_name="qtOk"), "mentions 'purchase'")
@@ -178,19 +195,27 @@ class RefusalTest(ClickTestCase):
 
     def test_ordinary_buttons_are_not_caught_by_the_short_words(self) -> None:
         for label in ("Display", "Replay", "Repaint", "Detect Joints", "Paste", "Save Skeleton", "Load Skeleton",
-                      "Bake Textures", "Create CC Actor", "Refine Mesh", "Generate Skeleton", "OK", "Cancel"):
+                      "Bake Textures", "Create CC Actor", "Refine Mesh", "Generate Skeleton", "OK", "Cancel",
+                      "Cartoon Shader", "Border Width", "Reorder", "Delete", "Remove", "Log In", "Update"):
             self.assertIsNone(cc5_uiclick.deny_reason(label, "qtButton", ""), label)
 
     def test_deny_reason_names_the_word(self) -> None:
         self.assertEqual(cc5_uiclick.deny_reason("Generate Wrap Points"), "point")
         self.assertEqual(cc5_uiclick.deny_reason("", "qtBuyButton"), "buy")
-        self.assertEqual(cc5_uiclick.deny_reason("Log In"), "log in")
-        self.assertEqual(cc5_uiclick.deny_reason("Save", "", "<b>Del</b>ete all"), "delete")
+        self.assertEqual(cc5_uiclick.deny_reason("Check out", "qtCheckoutButton"), "checkout")
+        self.assertEqual(cc5_uiclick.deny_reason("Terms"), "terms")
+        self.assertEqual(cc5_uiclick.deny_reason("Save", "", "<b>Pur</b>chase all"), "purchase")
+        self.assertIsNone(cc5_uiclick.deny_reason("Log In"))
+        self.assertIsNone(cc5_uiclick.deny_reason("Save", "", "<b>Del</b>ete all"))
 
     def test_the_word_list_is_the_agreed_one(self) -> None:
         self.assertEqual(set(cc5_uiclick.DENY_WORDS), {
-            "point", "ポイント", "buy", "購入", "purchase", "delete", "削除", "remove", "license", "licence",
+            "point", "ポイント", "buy", "購入", "purchase", "license", "licence",
             "ライセンス", "activate", "upgrade", "credit", "クレジット", "subscribe", "pay", "支払"})
+        self.assertEqual(set(cc5_ui.MONEY_WORDS), {"pay", "paid", "price", "pricing", "order", "cart", "credit"})
+        self.assertEqual(set(cc5_ui.AGREEMENT_STEMS), {"agree", "terms", "eula"})
+        for gone in ("delete", "remove", "log in", "login", "sign in", "updat", "password", "account", "register"):
+            self.assertNotIn(gone, cc5_uiclick.DENY_WORDS + cc5_ui.MONEY_STEMS + cc5_ui.MONEY_WORDS + cc5_ui.AGREEMENT_STEMS)
 
     def test_disabled_button_is_refused(self) -> None:
         self.save._enabled = False
@@ -202,6 +227,38 @@ class RefusalTest(ClickTestCase):
         self.assert_refused(self.click(text="Paste"), "a person must decide")
         self.assertEqual(self.paste.clicks, 0)
 
+    def test_every_money_or_agreement_window_blocks_all_presses(self) -> None:
+        windows = (("Store", "Purchase this pack?"), ("Store", "Buy now"), ("Order", "Confirm your order"),
+                   ("Checkout", "Review"), ("Cart", "2 items in your cart"), ("Content", "This costs 5 credits"),
+                   ("Plan", "Your subscription ends soon"), ("Store", "Payment method"), ("Store", "Price: 5 USD"),
+                   ("Info", "A paid upgrade is available"), ("Info", "Start your free trial"),
+                   ("Activation", "Enter the key"), ("Info", "Activate this product"), ("License", "Expired"),
+                   ("Store", "Use DA Points?"), ("確認", "購入しますか"), ("Terms of Use", "Read"),
+                   ("Info", "I agree to the agreement"), ("EULA", "Read"), ("確認", "利用規約に同意"))
+        for title, text in windows:
+            with self.subTest(title=title, text=text):
+                dlg = self.dialog(title, text, ["OK", "Cancel"])
+                self.assert_refused(self.click(text="Paste"), "a person must decide", "money or an agreement")
+                self.assert_refused(self.click(window=title, text="Cancel"), "a person must decide")
+                self.assertEqual([b.clicks for b in dlg.findChildren(fake_qt.PushButton)], [0, 0])
+                self.q.app.tops.remove(dlg)
+        self.assertEqual(self.paste.clicks, 0)
+
+    def test_login_update_and_delete_windows_do_not_block_and_can_be_answered(self) -> None:
+        windows = (("Login", "Log in with your account", ["Sign in", "Cancel"]),
+                   ("Update", "A new update is available. Update now?", ["Update", "Later"]),
+                   ("Delete", "Delete all layers?", ["Delete", "No"]),
+                   ("Confirm", "Overwrite the existing file?", ["Yes", "No"]))
+        for n, (title, text, buttons) in enumerate(windows, 1):
+            with self.subTest(title=title):
+                dlg = self.dialog(title, text, buttons)
+                fake_qt.LineEdit(dlg, echo=fake_qt.LineEdit.Password)
+                self.run_click(text="Paste")
+                self.assertEqual(self.paste.clicks, n)
+                self.run_click(window=title, text=buttons[0])
+                self.assertEqual([b.clicks for b in dlg.findChildren(fake_qt.PushButton)], [1, 0])
+                self.q.app.tops.remove(dlg)
+
     def test_a_modal_window_blocks_buttons_outside_it_but_not_inside(self) -> None:
         dlg = self.dialog("Save Skeleton", "Choose a file name", ["Save", "Cancel"])
         dlg._modal = True
@@ -212,7 +269,8 @@ class RefusalTest(ClickTestCase):
 
 
 class UnsavedBoxTest(ClickTestCase):
-    """Owner-approved exception: only Cancel of CC5's start-up 'Unsaved project data found' box."""
+    """CC5's start-up 'Unsaved project data found' box: "update" is no refused word any more (2026-11-19),
+    so both buttons can be pressed; the box is found although the main window has the same title."""
 
     TEXT = "Unsaved project data found. Would you like to update your project with the unsaved changes?"
 
@@ -229,18 +287,26 @@ class UnsavedBoxTest(ClickTestCase):
         self.run_click(window="Character Creator 5", text="Cancel")
         self.assertEqual((self.button(dlg, "Cancel").clicks, self.button(dlg, "OK").clicks), (1, 0))
 
-    def test_ok_of_the_box_is_still_refused(self) -> None:
+    def test_ok_of_the_box_can_be_pressed_too_now(self) -> None:
         dlg = self.box()
-        self.assert_refused(self.click(window="Character Creator 5", text="OK"), "a person must decide")
-        self.assertEqual(self.button(dlg, "OK").clicks, 0)
+        self.run_click(window="Character Creator 5", text="OK")
+        self.assertEqual((self.button(dlg, "Cancel").clicks, self.button(dlg, "OK").clicks), (0, 1))
 
-    def test_other_buttons_stay_blocked_while_the_box_is_open(self) -> None:
+    def test_the_box_is_taken_although_the_main_window_has_the_same_title(self) -> None:
+        main = fake_qt.MainWindow(title="Character Creator 5")
+        self.q.app.tops.append(main)
+        fake_qt.PushButton("Cancel", main, name="qtMainCancel")
+        dlg = self.box()
+        self.run_click(window="Character Creator 5", text="Cancel")
+        self.assertEqual(self.button(dlg, "Cancel").clicks, 1)
+
+    def test_buttons_outside_the_modal_box_stay_blocked_by_the_modal_rule(self) -> None:
         self.box()
-        self.assert_refused(self.click(text="Paste"), "a person must decide")
+        self.assert_refused(self.click(text="Paste"), "modal window 'Character Creator 5' is open")
         self.assertEqual(self.paste.clicks, 0)
 
-    def test_a_box_with_other_text_or_extra_buttons_is_not_the_exception(self) -> None:
-        for kwargs in ({"text": "A new update is available. Would you like to update now?"},
+    def test_a_box_that_mentions_money_is_still_refused(self) -> None:
+        for kwargs in ({"text": "A paid upgrade is available. Would you like to purchase it now?"},
                        {"buttons": ["OK", "Cancel", "Buy"]}):
             with self.subTest(kwargs):
                 dlg = self.box(**kwargs)
@@ -273,10 +339,10 @@ class MenuTest(ClickTestCase):
         self.assertEqual(self.disk.clicks, 0)
 
     def test_menu_entry_refusals(self) -> None:
-        self.entries += [fake_qt.Action("Hidden", visible=False), fake_qt.Action("Delete Skeleton"),
+        self.entries += [fake_qt.Action("Hidden", visible=False), fake_qt.Action("Buy Skeleton"),
                          fake_qt.Action("More", submenu=fake_qt.ActionMenu([]))]
         cases = (("Export", "is not there"), ("Hidden", "is hidden"), ("More", "sub-menu"),
-                 ("Delete Skeleton", "mentions 'delete'"))
+                 ("Buy Skeleton", "mentions 'buy'"))
         for item, needle in cases:
             with self.subTest(item=item):
                 self.assert_refused(self.click(object_name="qtSkeletonFileButton", menu_item=item), needle)
@@ -284,6 +350,12 @@ class MenuTest(ClickTestCase):
         self.assert_refused(self.click(object_name="qtSkeletonFileButton", menu_item="Save Skeleton"), "disabled")
         self.assert_refused(self.click(object_name="qtPasteButton", menu_item="Save Skeleton"), "no drop-down menu")
         self.assertEqual(sum(a.triggered for a in self.entries), 0)
+
+    def test_a_delete_menu_entry_is_pressed_now(self) -> None:
+        delete = fake_qt.Action("Delete Skeleton")
+        self.entries.append(delete)
+        self.run_click(object_name="qtSkeletonFileButton", menu_item="Delete Skeleton")
+        self.assertEqual(delete.triggered, 1)
 
     def test_owner_exception_wrap_points_menu_entries_in_body_wrap_only(self) -> None:
         save, load = fake_qt.Action("Save Wrap Points"), fake_qt.Action("Load Wrap Points")

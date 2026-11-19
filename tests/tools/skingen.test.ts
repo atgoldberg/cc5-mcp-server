@@ -89,11 +89,12 @@ describe("skingen_editor", () => {
     bridge.uiSkinGenEditor.mockResolvedValue({ success: true, job_id: "e-3" });
     bridge.uiWaitJob.mockResolvedValue({
       finished: true,
-      result: { success: false, error: "a window needs a person: 'Save'", blocked_by: { title: "Save", text: "Save changes?", buttons: ["Yes", "No"] } },
+      result: { success: false, error: "a window this tool does not answer is open: 'Save'", blocked_by: { title: "Save", text: "Save changes?", buttons: ["Yes", "No"] } },
     });
     bridge.uiWindows.mockResolvedValue({ success: true, windows: [{ title: "Save", text: "Save changes?", buttons: ["Yes", "No"], png_base64: "UE5H" }] });
     const result = await call("skingen_editor", { active: false });
-    expect(texts(result)).toContain("Failed: a window needs a person");
+    expect(texts(result)).toContain("Failed: a window this tool does not answer is open");
+    expect(texts(result)).not.toContain("person");
     expect(texts(result)).toContain("Save changes?");
     expect(result.content.some((c: { type: string }) => c.type === "image")).toBe(true);
   });
@@ -206,12 +207,26 @@ describe("skingen_layer", () => {
     bridge.uiSkinGenLayer.mockResolvedValue({ success: true, job_id: "l-3" });
     bridge.uiWaitJob.mockResolvedValue({
       finished: true,
-      result: { success: false, error: "a window needs a person: 'Delete'", blocked_by: { title: "Delete", text: "Delete the layer?", buttons: ["Yes", "No"] } },
+      result: { success: false, error: "a window this tool does not answer is open: 'Delete'", blocked_by: { title: "Delete", text: "Delete the layer?", buttons: ["Yes", "No"] } },
     });
     bridge.uiWindows.mockResolvedValue({ success: true, windows: [{ title: "Delete", text: "Delete the layer?", buttons: ["Yes", "No"], png_base64: "UE5H" }] });
     const result = await call("skingen_layer", { action: "delete", index: 0, confirm_delete: true });
-    expect(texts(result)).toContain("waiting for a person");
+    expect(texts(result)).toContain("A window this tool does not answer is open (it was left alone): 'Delete'");
+    expect(texts(result)).toContain("click_ui_button");
+    expect(texts(result)).not.toContain("person");
     expect(result.content.some((c: { type: string }) => c.type === "image")).toBe(true);
+  });
+
+  it("a licence window that stops a layer job is still a person's to decide", async () => {
+    bridge.uiSkinGenLayer.mockResolvedValue({ success: true, job_id: "l-4" });
+    bridge.uiWaitJob.mockResolvedValue({
+      finished: true,
+      result: { success: false, error: "a window needs a person: 'License'", blocked_by: { title: "License", text: "expired", buttons: ["OK"], needs_human: "licen" } },
+    });
+    bridge.uiWindows.mockResolvedValue({ success: true, windows: [] });
+    const result = await call("skingen_layer", { action: "hide", index: 0 });
+    expect(texts(result)).toContain("waiting for a person");
+    expect(texts(result)).toContain("人が判断: mentions 'licen'");
   });
 
   it("failure text includes the menu entries and layers", () => {

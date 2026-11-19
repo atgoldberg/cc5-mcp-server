@@ -57,10 +57,12 @@ export function registerUiClickTools(server: McpServer, bridge: CC5Bridge, wait:
       "include_other=true for floating tool windows such as Body Wrap). For a button with a drop-down menu " +
       "(like the disk button with Load / Save Skeleton) give menu_item to press one entry. CC5 refuses, and " +
       "presses nothing, when: nothing or more than one VISIBLE button matches; the button or entry is disabled " +
-      "or hidden; its text, objectName or tool tip mentions points, buy, purchase, delete, remove, licence, " +
-      "activate, upgrade, credit, subscribe, pay (or ポイント 購入 削除 ライセンス クレジット 支払), or login / " +
-      "update / terms / trial; a licence / purchase / login window is open; a modal window is open and the " +
-      "button is not in it. Waits wait_ms, then returns a picture of the window and the dialogs that are open " +
+      "or hidden; its text, objectName or tool tip is about spending money -- points, buy, purchase, order, " +
+      "checkout, cart, credit, subscribe, pay, price, upgrade, trial, activate, licence (or ポイント 購入 " +
+      "ライセンス クレジット 支払) -- or about accepting terms / an agreement / a EULA; a window about those " +
+      "(purchase, licence, activation, terms) is open; a modal window is open and the button is not in it. " +
+      "Since 2026-11-19 nothing else is refused by word: delete, remove, login and update buttons ARE " +
+      "pressed, so read the window first and be sure. Waits wait_ms, then returns a picture of the window and the dialogs that are open " +
       "(a window the click opened is never answered: look at it, and ask the owner when it is not routine). " +
       "Do not use it to get past a refusal of another tool.",
     {

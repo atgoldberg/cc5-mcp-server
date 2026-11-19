@@ -46,10 +46,12 @@ describe("select_ui_tab – registration", () => {
     expect(server.tool).toHaveBeenCalledTimes(1);
     const description = server.tool.mock.calls[0][1] as string;
     for (const word of ["setCurrentIndex", "list_only", "changes nothing", "never presses a button", "disabled or hidden",
-      "points", "purchase", "delete", "licence", "activate", "upgrade", "credit", "subscribe", "pay",
-      "ポイント", "購入", "削除", "ライセンス", "クレジット", "支払", "modal", "tab_widget"]) {
+      "points", "buy", "purchase", "order", "checkout", "cart", "credit", "subscribe", "pay", "price", "upgrade",
+      "trial", "activate", "licence", "terms", "agreement",
+      "ポイント", "購入", "ライセンス", "クレジット", "支払", "modal", "tab_widget"]) {
       expect(description).toContain(word);
     }
+    for (const gone of ["delete", "remove", "login", "update", "削除"]) expect(description).not.toContain(gone);
   });
 
   it("schema: window is required, names are bounded, index is 0-999, wait_ms is 200-15000", () => {

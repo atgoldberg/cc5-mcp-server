@@ -19,9 +19,11 @@ export function registerDialogTools(server: McpServer, watcher?: DialogWatcher, 
       "(title, body text, button labels, process, foreground) and optionally capture an image of each. " +
       "Works even when CC5's main thread is blocked by a modal dialog (so other tools hang). " +
       "READ-ONLY: this tool never clicks. The only tool that presses a button by name is click_ui_button " +
-      "(one named button; it refuses licence, purchase, delete, login and similar buttons, and presses " +
-      "nothing while such a window is open). Agreements, purchases, logins, updates, deletes and overwrites " +
-      "must be decided by a human. Report what you see and ask.",
+      "(one named button; it refuses buttons about spending money -- purchase, order, payment, credits, " +
+      "subscription, upgrade, trial, activation, licence -- or accepting terms / an agreement, and presses " +
+      "nothing while such a window is open). Those dialogs are flagged 人が判断 and must be decided by a " +
+      "human: report what you see and ask. Other dialogs (delete, overwrite, login, update, ...) are not " +
+      "flagged since 2026-11-19: read them, and answer with click_ui_button only when the answer is clear.",
     { screenshot: z.boolean().optional().describe("Also capture a PNG of each dialog (default true)") },
     async (args: { screenshot?: boolean }) => {
       const wantShot = args?.screenshot !== false;
