@@ -39,6 +39,12 @@ class ForbiddenWordsTest(unittest.TestCase):
         self.assertEqual(cc5_ui.forbidden_match("Terms of Use"), ("terms", "agreement"))
         self.assertEqual(cc5_ui.forbidden_match("License Agreement")[1], "money")        # MONEY is looked at first
         self.assertIsNone(cc5_ui.forbidden_match("Log in to update or delete"))
+        # a cost confirmation is money even without the word "purchase"; bare wrap "points" are not
+        for text in ("This will cost 50 points. Continue?", "50 points will be deducted from your balance",
+                     "You will be charged", "Spend points to generate"):
+            self.assertEqual(cc5_ui.forbidden_match(text)[1], "money", text)
+        self.assertIsNone(cc5_ui.forbidden_match("Save Wrap Points"))
+        self.assertIsNone(cc5_ui.forbidden_match("Generate wrap points on the mesh"))
 
     def test_disguised_words(self) -> None:
         for text in ("LİCENSE", "TRİAL", "Lic\u00adense", "Ｌｉｃｅｎｓｅ", "Lic ense", "Lic<b>ense</b>"):

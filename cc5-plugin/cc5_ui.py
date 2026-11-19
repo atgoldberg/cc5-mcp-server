@@ -83,6 +83,9 @@ MONEY_STEMS = (
     "invoice", "refund", "premium", "membership", "upgrad", "activat", "deactivat", "reactivat", "trial",
     "serial", "product key", "authoriz", "renew", "redeem", "coupon", "voucher", "credit card", "da point",
     "ai point", "lizenz", "kaufen", "acheter", "comprar", "лицензи",
+    # A confirmation that names a cost ("This will cost 50 points", "points will be deducted", "you will be
+    # charged") has none of the words above, and bare "points" must stay free for Body Wrap's wrap points.
+    "cost", "deduct", "charge", "charging", "spend", "spent",
 )
 # Short words, matched as whole words only, with an optional plural s ('cart' is not 'cartoon',
 # 'order' is not 'border', 'pay' is not 'display').
