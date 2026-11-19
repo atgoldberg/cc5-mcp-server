@@ -36,6 +36,7 @@ import { registerSkinGenTools } from "./tools/skingen.js";
 import { registerUiWindowTools } from "./tools/ui-windows.js";
 import { registerFramedCaptureTools } from "./tools/framed-capture.js";
 import { registerUiClickTools } from "./tools/ui-click.js";
+import { registerUiTabTools } from "./tools/ui-tab.js";
 import { DialogWatcher, withDialogWatch } from "./dialogs.js";
 import { registerMorphResources } from "./resources/morphs.js";
 
@@ -76,6 +77,7 @@ async function main() {
   registerUiWindowTools(server, bridge);
   registerFramedCaptureTools(server, bridge);
   registerUiClickTools(server, bridge);
+  registerUiTabTools(server, bridge);
 
   // Register resources
   registerMorphResources(server, bridge);

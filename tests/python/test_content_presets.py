@@ -267,8 +267,14 @@ class ApplyTest(UiTestCase):
     def test_only_listed_preset_types_can_be_applied(self) -> None:
         for name in ("scene.ccProject", "char.ccAvatar", "char.iAvatar", "x.ini", "x.iso", "x.fbx", "x.iProject"):
             self.assertIsNotNone(cc5_content.check_preset_path(self.file(name)), name)
-        for name in ("a.ccSkinGenPreset", "b.rlEyelashElement", "c.ccAvatarPreset", "d.iMtl", "e.rlHairStyle"):
+        for name in ("a.ccSkinGenPreset", "b.rlEyelashElement", "c.ccAvatarPreset", "d.iMtl", "e.rlHairStyle",
+                     "f.rlWrinkle", "g.RLWRINKLE"):
             self.assertIsNone(cc5_content.check_preset_path(self.file(name)), name)
+
+    def test_the_list_has_no_type_that_replaces_the_scene_or_the_character(self) -> None:
+        self.assertIn(".rlwrinkle", cc5_content.ALLOWED_APPLY_EXTS)
+        for ext in (".ccproject", ".iproject", ".ccavatar", ".iavatar", ".fbx", ".obj", ".rlhead", ".ccscene"):
+            self.assertNotIn(ext, cc5_content.ALLOWED_APPLY_EXTS)
 
     def test_network_and_stream_paths_are_refused(self) -> None:
         for path in ("//host/share/a.ccAvatarPreset", "C:/x/a.ccAvatarPreset:stream"):

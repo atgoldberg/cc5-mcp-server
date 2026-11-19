@@ -102,7 +102,8 @@ export function registerPresetTools(server: McpServer, bridge: CC5Bridge, wait: 
   server.tool(
     "apply_preset",
     "Apply content preset file(s) to the avatar WITHOUT the mouse: .ccAvatarPreset (eyelash presets), " +
-      ".rlEyelashElement (eyelash strips), .ccSkinGenPreset (makeup: lip, eye, eyelash), other .cc*/.rl*/.i* " +
+      ".rlEyelashElement (eyelash strips), .ccSkinGenPreset (makeup: lip, eye, eyelash), .rlWrinkle (expression " +
+      "wrinkle presets), other .cc*/.rl*/.i* " +
       "content (never .ccProject / .ccAvatar / .fbx). Uses RFileIO.LoadFile with the avatar selected. While it " +
       "runs, ONLY these question windows are answered: 'Apply Character Preset' / 'Apply Eyelash Elements' " +
       "(Apply, with 'Restore neutral lash strip' ticked unless restore_neutral_lash=false), 'add a new layer or " +

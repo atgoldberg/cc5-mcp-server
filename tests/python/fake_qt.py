@@ -243,6 +243,61 @@ class PlainTextEdit(TextEdit):
     pass
 
 
+class _Tabbed(Widget):
+    """What QTabBar and QTabWidget share: tabs is a list of (text, tool tip); set_calls records
+    setCurrentIndex(). (In Qt, as here, a QTabWidget is not a QTabBar.)"""
+
+    def __init__(self, parent: Widget, name: str = "", tabs: "list[tuple[str, str]] | None" = None,
+                 current: int = 0, visible: bool = True) -> None:
+        super().__init__(name=name, parent=parent, visible=visible)
+        self._tabs = list(tabs or [])
+        self._current = current if self._tabs else -1
+        self.tab_enabled = [True] * len(self._tabs)
+        self.tab_visible = [True] * len(self._tabs)
+        self.set_calls: list[int] = []
+        self.on_change: Callable[[int], None] | None = None
+
+    def count(self) -> int:
+        return len(self._tabs)
+
+    def currentIndex(self) -> int:
+        return self._current
+
+    def setCurrentIndex(self, index: int) -> None:
+        self.set_calls.append(index)
+        if 0 <= index < len(self._tabs) and index != self._current:
+            self._current = index
+            if self.on_change:
+                self.on_change(index)
+
+    def tabText(self, index: int) -> str:
+        return self._tabs[index][0] if 0 <= index < len(self._tabs) else ""
+
+    def tabToolTip(self, index: int) -> str:
+        return self._tabs[index][1] if 0 <= index < len(self._tabs) else ""
+
+    def isTabEnabled(self, index: int) -> bool:
+        return self.tab_enabled[index]
+
+    def isTabVisible(self, index: int) -> bool:
+        return self.tab_visible[index]
+
+
+class TabBar(_Tabbed):
+    """QTabBar stand-in. With a TabWidget as parent it is that tab widget's own bar."""
+
+
+class TabWidget(_Tabbed):
+    """QTabWidget stand-in (same tab methods as the bar, plus the page widgets)."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.pages: list[Widget] = []
+
+    def widget(self, index: int) -> "Widget | None":
+        return self.pages[index] if 0 <= index < len(self.pages) else None
+
+
 class Action:
     def __init__(self, text: str, enabled: bool = True, on_trigger: Callable[[], None] | None = None,
                  visible: bool = True, tooltip: str = "", separator: bool = False, submenu: Any = None,
@@ -529,6 +584,8 @@ def make_qt() -> types.SimpleNamespace:
         QComboBox=ComboBox,
         QTableWidget=Table,
         QDockWidget=DockWidget,
+        QTabWidget=TabWidget,
+        QTabBar=TabBar,
         QTimer=Timer,
         QBuffer=_buffer_factory,
         QByteArray=ByteArray,

@@ -48,6 +48,7 @@ layer". Everything goes through the cc5 MCP tools below (or `scripts/ui_client.p
 | Name of a widget | `find_ui_widgets` (read-only) |
 | Same-size comparison shots | `capture_framed_crop` (preset view, big render, fixed box) |
 | Press one named button (works on a locked screen) | `click_ui_button` (`window`, `object_name` and/or `text`, `menu_item` for a ▾ menu, `wait_ms`) |
+| A button is "hidden" because its tab is not in front | `select_ui_tab` (`window`, `tab_widget`; `list_only=true` first, then ONE of `index` / `text` / `tooltip`). Selects a tab only; same refusals as `click_ui_button`, and a refusal is just as final |
 
 `apply_preset`, `skingen_editor`, `skingen_layer`, `capture_framed_crop` and `click_ui_button` run as a job inside CC5. The tool
 waits for it. While it runs, other bridge commands are refused ("was NOT run"); only the read-only tools work.
@@ -96,7 +97,7 @@ wait, Mipmap, Loading) go away by themselves; question windows need the owner. C
 ## Facts and pitfalls (learned 2026-10-26)
 
 - Presets go on with `RFileIO.LoadFile(path)` with the avatar SELECTED (the tools do that). `.ccAvatarPreset`,
-  `.rlEyelashElement` and `.ccSkinGenPreset` work; `.ccProject` / `.ccAvatar` / FBX are refused on purpose.
+  `.rlEyelashElement`, `.ccSkinGenPreset` and `.rlWrinkle` (expression wrinkles) work; `.ccProject` / `.ccAvatar` / FBX are refused on purpose.
 - SkinGen layer eye button: **checked = hidden**. Layer widgets are rebuilt on every selection, so tools wait
   between steps; do not click by hand while a job runs.
 - The opacity box is `qtBlendOpacityHorizontalSliderEx > qtSpinBox` (0-100). It had never been tried on a real

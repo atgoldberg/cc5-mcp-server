@@ -996,6 +996,68 @@ export interface UiClickResult extends OperationResult {
   note?: string;
 }
 
+/** Body of POST /ui/tab: list the tabs of a window's tab widget, or bring ONE tab to the front. */
+export interface UiTabArgs {
+  window: string;
+  tab_widget?: string;
+  index?: number;
+  text?: string;
+  tooltip?: string;
+  list_only?: boolean;
+  wait_ms?: number;
+  screenshot?: boolean;
+  max_width?: number;
+}
+
+export interface UiTabInfo {
+  index: number;
+  text?: string;
+  tooltip?: string;
+  enabled?: boolean;
+  visible?: boolean;
+  /** objectName of the tab's page (QTabWidget only). */
+  page?: string;
+}
+
+export interface UiTabWidgetInfo {
+  object_name?: string;
+  class?: string;
+  current_index?: number;
+  count?: number;
+  enabled?: boolean;
+  tabs?: UiTabInfo[];
+  note?: string;
+}
+
+/** The reply of /ui/tab: the list itself (listed=true, no job), or the start of a job (job_id). */
+export interface UiTabReply extends UiJobStart {
+  listed?: boolean;
+  window?: string;
+  count?: number;
+  tab_widgets?: UiTabWidgetInfo[];
+  hidden_skipped?: number;
+}
+
+/** Result of a /ui/tab job (one tab was selected with setCurrentIndex; nothing was pressed). */
+export interface UiTabResult extends OperationResult {
+  window?: string;
+  tab_widget?: { object_name?: string; class?: string };
+  index_before?: number;
+  index_after?: number;
+  selected?: UiTabInfo;
+  previous?: UiTabInfo | null;
+  tabs?: UiTabInfo[];
+  select_returned?: boolean;
+  waited_ms?: number;
+  window_open?: boolean;
+  png_base64?: string;
+  png_size?: number[];
+  screenshot_error?: string;
+  /** The dialogs open after the switch (none of them is answered). */
+  dialogs?: UiWindowInfo[];
+  note?: string;
+}
+
 export interface UiCaptureCropResult extends OperationResult {
   view?: string;
   full_path?: string;

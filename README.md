@@ -9,6 +9,18 @@ An MCP (Model Context Protocol) server that lets LLMs like Claude control **Real
 **Character Creator 5.2 is supported.** The author uses this server every day on CC5.2, including the 5.2 Body Wrap steps (Generate Wrap Points, Align Points, Save / Load Wrap Points).
 CC5.2 に対応しています。作者は毎日 CC5.2 で使っています(5.2 の Body Wrap の手順を含む)。
 
+## Local changes in this fork
+
+Branch `piqsiq` differs from upstream (commit `a790fd8`) in two ways:
+
+1. **New tool `select_ui_tab`** (route `POST /ui/tab`, plugin module `cc5-plugin/cc5_uitab.py`): lists the tabs of a
+   tab widget inside a CC5 window, or brings ONE tab to the front with Qt's `setCurrentIndex()`. It exists because
+   `click_ui_button` (rightly) refuses hidden buttons, and a button such as Modify > "Subdivide" sits on a tab
+   that may not be the front one. It never presses a button, answers a dialog or opens a menu, and keeps the same
+   refusals as `click_ui_button`. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab).
+2. **`apply_preset` also accepts `.rlWrinkle`** (expression-wrinkle presets). Nothing that replaces the scene or the
+   character was added to the list.
+
 ## Architecture
 
 ```
@@ -22,9 +34,9 @@ The MCP server communicates with Claude via **stdio** transport and forwards com
 
 ## Features
 
-### MCP Tools (100)
+### MCP Tools (101)
 
-The MCP server provides 100 tools (registered in 23 modules under `src/tools/`) for controlling CC5. This list matches the code: there is one `server.tool(` call per tool in `src/tools/*.ts` (100 in total, all with unique names).
+The MCP server provides 101 tools (registered in 24 modules under `src/tools/`) for controlling CC5. This list matches the code: there is one `server.tool(` call per tool in `src/tools/*.ts` (101 in total, all with unique names).
 
 #### Scene & Avatar Management (8)
 | Tool | Description |
@@ -129,13 +141,13 @@ The MCP server provides 100 tools (registered in 23 modules under `src/tools/`) 
 
 **Automatic warning (Japanese):** while a dialog is open, *every* tool result starts with `⚠ CC5 に小窓が出ています ...` (or `ℹ Reallusion Hub に小窓 ...`) showing title / body / buttons. Dialogs that look like agreements, purchases, logins, updates, deletes or overwrites are flagged "人が判断". Scans are cached ~4 s (about 1 s when a rescan is needed). Implemented by `scripts/list-dialogs.ps1` (EnumWindows + UI Automation), independent of the bridge. Set `CC5_DIALOG_WATCH=0` to disable, `CC5_DIALOG_WATCH_IGNORE_HUB=1` to hide Hub-only notices.
 
-#### UI automation: presets, SkinGen, windows, framed capture, one button (10) -- no mouse
+#### UI automation: presets, SkinGen, windows, framed capture, one button, one tab (11) -- no mouse
 
 See [UI automation without the mouse](#ui-automation-without-the-mouse) for how it works and what it will and will not press.
 
 | Tool | Description |
 |------|-------------|
-| `apply_preset` | Apply preset file(s) to the avatar with `RFileIO.LoadFile`: eyelash presets (`.ccAvatarPreset`), eyelash strips (`.rlEyelashElement`), SkinGen makeup (`.ccSkinGenPreset`), hair, cloth, ... (a fixed list of types; never a project, character or FBX). Answers only the known question windows (Apply Character Preset / Eyelash Elements, add-or-replace layer, exit SkinGen editing mode) and reports every other window with a screenshot. Reports what was added/removed in the scene |
+| `apply_preset` | Apply preset file(s) to the avatar with `RFileIO.LoadFile`: eyelash presets (`.ccAvatarPreset`), eyelash strips (`.rlEyelashElement`), SkinGen makeup (`.ccSkinGenPreset`), expression-wrinkle presets (`.rlWrinkle`), hair, cloth, ... (a fixed list of types; never a project, character or FBX). Answers only the known question windows (Apply Character Preset / Eyelash Elements, add-or-replace layer, exit SkinGen editing mode) and reports every other window with a screenshot. Reports what was added/removed in the scene |
 | `list_presets` | List preset files that are on disk, by category (`eyelash_preset`, `eyelash_element`, `makeup_lip`, `makeup_eye`, `makeup_eyelash`, ...) or `$/...` content folder; `names` shows which wanted presets are missing (cloud items are not on disk) |
 | `skingen_state` | Read the SkinGen editor: on/off, tab, layers (visible / HIDDEN, selected) and the selected layer's opacity |
 | `skingen_editor` | Turn the SkinGen editor on/off; off bakes (~10 s), answers "exit SkinGen editing mode?" and waits until CC5 is quiet |
@@ -145,6 +157,7 @@ See [UI automation without the mouse](#ui-automation-without-the-mouse) for how 
 | `find_ui_widgets` | Read-only finder for CC5's own Qt widgets by objectName / class / text, to discover names for new automation |
 | `capture_framed_crop` | Frame a preset view, render it big (default 3600 px) and cut a fixed box, so options are compared at the same scale (does not depend on `dolly_camera`) |
 | `click_ui_button` | Press ONE named button of a CC5 window, dialog or dock panel with Qt's `click()` (works while the Windows screen is locked), or one entry of its drop-down menu (`menu_item`). Refuses ambiguous, hidden or disabled buttons and every button about points (except Body Wrap's exact "Generate Wrap Points" and "Align Points" and the menu entries "Save Wrap Points" / "Load Wrap Points", the owner's exception of 2026-10-31), buying, deleting / removing, licences, activation, upgrades, credits, subscriptions or payment. Returns a picture of the window and the dialogs that are open; never answers a window it opened. See [Pressing one named button](#pressing-one-named-button-click_ui_button) |
+| `select_ui_tab` | List the tabs of a tab widget (QTabWidget / QTabBar) inside a CC5 window, dialog or dock panel (`list_only`: objectName, class, current index and every tab's index, text, tool tip, enabled / visible; read-only), or bring ONE tab to the front with Qt's `setCurrentIndex()`, named by `index`, `text` or `tooltip` (icon-only tabs have no text). Use it when `click_ui_button` says a button is hidden because its tab is not in front. Never presses a button, answers a dialog or opens a menu. Refuses ambiguous, hidden or disabled tabs, tabs whose text or tool tip trips the `click_ui_button` word list, and any switch while a licence / purchase / login window or a foreign modal window is open. Returns the index before and after, the tab labels, a picture of the window and the open dialogs. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab) |
 
 #### MetaHuman (2)
 | Tool | Description |
@@ -378,6 +391,7 @@ answer; **every other bridge command is refused until the job ends** (RLPy is no
 | `/ui/windows`, `/ui/widgets` | open windows (+ PNG) / widget finder |
 | `/ui/capture_crop` (job) | frame, render big, cut a fixed box |
 | `/ui/click` (job) | press one named button (or one entry of its drop-down menu) |
+| `/ui/tab` (list: at once; select: job) | list the tabs of a tab widget / bring one tab to the front |
 | `/ui/job` | state / result of a job |
 
 **From a script:** `scripts/ui_client.py` (Python standard library only) starts a job and polls it, e.g.
@@ -387,7 +401,7 @@ Exit code 2 means a window needs a person.
 
 **Helper modules.** The code lives in `cc5_ui.py` (jobs, windows, the answers), `cc5_uiview.py` (pictures,
 widget finder, framed capture), `cc5_skingen.py`, `cc5_content.py`, `cc5_uiclick.py` (one named button),
-next to `cc5_api.py`. Copy all of them when you install by hand (`install-plugin.ps1` and `scripts/copy_to_installed.ps1` do); if one is
+`cc5_uitab.py` (one tab), next to `cc5_api.py`. Copy all of them when you install by hand (`install-plugin.ps1` and `scripts/copy_to_installed.ps1` do); if one is
 missing the routes answer with an error that says so and the rest of the bridge keeps working.
 `GET /reload` re-reads all of them.
 
@@ -432,6 +446,45 @@ The click runs on CC5's main thread from a Qt timer, so if it opens a modal wind
 question) the job still finishes: the reply says `click_returned: false` and lists that window with its
 picture. **Nothing in it is answered.** Look at it and ask the owner when it is not routine. The checks
 live in the bridge (`cc5_uiclick.py`), because any local program can call it; the MCP tool only forwards.
+
+### Bringing one tab to the front (select_ui_tab)
+
+Added on 2026-11-19 (this fork). `click_ui_button` never presses a hidden button, and a button on a tab page
+that is not in front is hidden. The Modify panel's tab widget (objectName `qtAttributeRootTab`) is such a case:
+"Subdivide" is on one of its pages. Tool `select_ui_tab`, route `POST /ui/tab`, switches the tab and does
+nothing else.
+
+| Argument | Meaning |
+|----------|---------|
+| `window` (required) | Title of the CC5 window, dialog or dock panel (case-insensitive), or its objectName; same rules as `click_ui_button` |
+| `tab_widget` | Exact objectName of the QTabWidget / QTabBar. Needed when the window shows more than one |
+| `index` or `text` or `tooltip` | The tab, by exactly ONE of: 0-based index; exact text (case and the `&` marker are ignored); exact tool tip (case is ignored). Icon-only tabs have no text: use the index or the tool tip |
+| `list_only` | Only list (default false). The list is also what you get when no `index` / `text` / `tooltip` is given |
+| `wait_ms` | How long to wait after the switch before the picture (default 500, 200-15000) |
+| `screenshot`, `max_width` | PNG of the window and of every open dialog after a switch (default true, 900 px) |
+
+**Listing** is read-only and answered at once (no job): for each visible tab widget its objectName, class,
+current index and every tab's index, text, tool tip, enabled and visible state (and the objectName of the tab's
+page when it has one). List first, then select.
+
+**Selecting** runs as a job on CC5's main thread, calls `setCurrentIndex()` once and reports the tab widget, the
+index before and after, the labels, a picture of the window and the dialogs that are open. **It refuses (and
+changes nothing) when:**
+
+- the window matches nothing or more than one window;
+- no visible tab widget is there, or more than one and `tab_widget` was not given (the candidates are listed; hidden tab widgets never count);
+- the index / text / tool tip matches no tab or several tabs (the tabs are listed);
+- the tab (or the whole tab widget) is disabled, or the tab is hidden (`isTabEnabled` / `isTabVisible`; a Qt without `isTabVisible` counts tabs as visible);
+- the tab's text or tool tip contains a word of the `click_ui_button` list above (`cc5_uiclick.deny_reason`);
+- a window that needs a person (licence, purchase, login, ...) is open;
+- a modal window is open and the tab widget is not in it.
+
+It never presses a button, never answers a dialog and never opens a menu; a window that a tab switch opens is
+reported with its picture and left alone. The checks live in the bridge (`cc5_uitab.py`); the MCP tool only
+forwards. Example: `{"window": "MainWindow", "tab_widget": "qtAttributeRootTab", "list_only": true}`, then
+`{"window": "MainWindow", "tab_widget": "qtAttributeRootTab", "index": 2}`, then `click_ui_button`.
+(The window name and the index in this example are placeholders: read the real ones from `list_only` and
+`find_ui_widgets` on your CC5. Not yet run against a live CC5.)
 
 ### ボタンを 1 つ押す(click_ui_button、日本語)
 
@@ -509,7 +562,7 @@ cc5-mcp-server/
 │   ├── cc5-bridge.ts       # HTTP client for CC5 bridge
 │   ├── types.ts            # Type definitions
 │   ├── util.ts             # Shared utilities (bridgeCall wrapper)
-│   ├── tools/              # MCP tool definitions (24 files, 100 tools total)
+│   ├── tools/              # MCP tool definitions (25 files, 101 tools total)
 │   │   ├── morph.ts        # Morph search, adjust, reset (5 tools)
 │   │   ├── scene.ts        # Scene/avatar management, viewport, subdivision (7 tools)
 │   │   ├── asset.ts        # Asset loading / FBX export (2 tools)
@@ -532,6 +585,7 @@ cc5-mcp-server/
 │   │   ├── ui-windows.ts   # list_cc5_windows, get_ui_job, find_ui_widgets (3 tools)
 │   │   ├── framed-capture.ts # capture_framed_crop (1 tool)
 │   │   ├── ui-click.ts     # click_ui_button (1 tool)
+│   │   ├── ui-tab.ts       # select_ui_tab (1 tool)
 │   │   ├── ui-common.ts    # Shared helpers of the UI tools (job waiting, window text)
 │   │   └── workflow.ts     # Text-only workflow routes (26 tools)
 │   └── resources/
@@ -545,6 +599,7 @@ cc5-mcp-server/
 │   ├── cc5_skingen.py      # SkinGen editor / layers
 │   ├── cc5_content.py      # Preset list / apply
 │   ├── cc5_uiclick.py      # Press one named button (/ui/click) and its refusals
+│   ├── cc5_uitab.py        # List tabs / bring one tab to the front (/ui/tab) and its refusals
 │   └── config.json         # Plugin configuration
 ├── scripts/ui_client.py    # Stdlib client for the /ui routes (job polling, window PNGs)
 ├── tests/                  # Vitest unit tests; tests/python = bridge + UI automation tests

@@ -105,7 +105,7 @@ class UiOverHttpTest(unittest.TestCase):
     def test_every_ui_route_is_registered_on_the_real_server(self) -> None:
         for path in ("/ui/windows", "/ui/widgets", "/ui/job", "/ui/capture_crop", "/ui/skingen/state",
                      "/ui/skingen/editor", "/ui/skingen/layer", "/ui/preset/list", "/ui/preset/apply",
-                     "/ui/click"):
+                     "/ui/click", "/ui/tab"):
             self.assertIn(path, server.POST_ROUTES)
             self.assertNotEqual(server.POST_ROUTES[path], "ui_modules_missing", path)
 
@@ -192,6 +192,31 @@ class UiOverHttpTest(unittest.TestCase):
         self.assertEqual(status, 200, data)             # the owner's exception (2026-10-31)
         self.assertTrue(self.wait_job(data["result"]["job_id"])["result"]["success"])
         self.assertEqual(align.clicks, 1)
+
+    def test_tab_lists_at_once_selects_as_a_job_and_refusals_are_400(self) -> None:
+        win = fake_qt.Widget(name="ModifyWindow", title="Modify Panel")
+        win._is_window = True
+        tabs = fake_qt.TabWidget(win, name="qtAttributeRootTab", tabs=[("", "Morph"), ("", "Modify"), ("Buy", "")])
+        self.q.app.tops.append(win)
+        self.addCleanup(self.q.app.tops.remove, win)
+        status, data = self.request("/ui/tab", {"window": "Modify Panel", "list_only": True})
+        self.assertEqual(status, 200, data)
+        self.assertNotIn("job_id", data["result"])
+        self.assertEqual([t["tooltip"] for t in data["result"]["tab_widgets"][0]["tabs"]], ["Morph", "Modify", ""])
+        self.assertEqual(tabs.set_calls, [])
+        status, data = self.request("/ui/tab", {"window": "Modify Panel", "tooltip": "Modify", "wait_ms": 200})
+        self.assertEqual(status, 200, data)
+        result = self.wait_job(data["result"]["job_id"])["result"]
+        self.assertTrue(result["success"], result)
+        self.assertEqual((result["index_before"], result["index_after"], tabs.set_calls), (0, 1, [1]))
+        self.assertTrue(result["png_base64"])
+        for body, needle in (({"window": "Modify Panel", "index": 2}, "mentions 'buy'"),
+                             ({"window": "Modify Panel", "index": 7}, "no tab with index 7"),
+                             ({"window": "Modify Panel", "index": 0, "press": "OK"}, "unknown argument")):
+            status, data = self.request("/ui/tab", body)
+            self.assertEqual(status, 400, data)
+            self.assertIn(needle, data["error"])
+        self.assertEqual(tabs.set_calls, [1])
 
 
 if __name__ == "__main__":

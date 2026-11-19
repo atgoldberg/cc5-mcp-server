@@ -45,6 +45,8 @@ describe("registration", () => {
     }
     const description = server.tool.mock.calls.find((c: unknown[]) => c[0] === "apply_preset")[1] as string;
     expect(description).toContain("NEVER pressed");
+    expect(description).toContain(".rlWrinkle");
+    expect(description).toContain("never .ccProject / .ccAvatar / .fbx");
     expect(description).toContain("licence");
   });
 

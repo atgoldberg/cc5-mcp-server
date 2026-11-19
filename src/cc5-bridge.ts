@@ -99,6 +99,8 @@ import type {
   SkinGenLayerArgs,
   UiCaptureCropArgs,
   UiClickArgs,
+  UiTabArgs,
+  UiTabReply,
   ExecPythonResult,
 } from "./types.js";
 
@@ -932,6 +934,11 @@ export class CC5Bridge {
 
   async uiClick(args: UiClickArgs): Promise<UiJobStart> {
     return this.ui<UiJobStart>("/ui/click", args);
+  }
+
+  /** The list of tabs comes back at once (listed=true); selecting a tab starts a job (job_id). */
+  async uiSelectTab(args: UiTabArgs): Promise<UiTabReply> {
+    return this.ui<UiTabReply>("/ui/tab", args);
   }
 
   async uiJob<T extends OperationResult = OperationResult>(jobId: string): Promise<UiJobStatus<T>> {

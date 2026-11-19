@@ -92,6 +92,7 @@ describe("request shapes", () => {
     ["uiWidgets", () => bridge.uiWidgets({ object_name: "qtSpinBox" }), "/ui/widgets", { object_name: "qtSpinBox" }],
     ["uiCaptureCrop", () => bridge.uiCaptureCrop({ size: 3600 }), "/ui/capture_crop", { size: 3600 }],
     ["uiClick", () => bridge.uiClick({ window: "Body Wrap", text: "Paste" }), "/ui/click", { window: "Body Wrap", text: "Paste" }],
+    ["uiSelectTab", () => bridge.uiSelectTab({ window: "MainWindow", tab_widget: "qtAttributeRootTab", index: 2 }), "/ui/tab", { window: "MainWindow", tab_widget: "qtAttributeRootTab", index: 2 }],
     ["uiJob", () => bridge.uiJob("preset-1"), "/ui/job", { job_id: "preset-1" }],
   ])("%s posts to %s", async (_name, call, path, body) => {
     const fetchFn = stubFetch([ok({ success: true })]);

@@ -244,7 +244,7 @@ def find_button(q: Any, scope: Any, object_name: str | None, text: str | None) -
         return None, f"no button with {what} in {where}. Visible buttons there: {', '.join(shown) or '(none)'}", 0
     if not visible:
         return None, (f"the button with {what} in {where} is hidden (not on screen); hidden buttons are never "
-                      "pressed. Bring its page or tab to the front first"), hidden
+                      "pressed. Bring its page or tab to the front first (a tab: tool select_ui_tab)"), hidden
     if len(visible) > 1:
         listed = ", ".join(_button_desc(b) for b in visible[:MAX_LISTED])
         return None, (f"{len(visible)} visible buttons match {what} in {where}: {listed}. Nothing was pressed; "
@@ -425,6 +425,13 @@ def _report(p: dict[str, Any], window: Any, button: Any, before: bool | None, st
         out["checked_before"], out["checked_after"] = before, _checked(button)
     if hidden:
         out["hidden_skipped"] = hidden
+    add_window_view(out, p, window)
+    return out
+
+
+def add_window_view(out: dict[str, Any], p: dict[str, Any], window: Any) -> None:
+    """Fill window_open, the window picture (p["screenshot"]) and the open dialogs into a job result.
+    Read-only: no dialog is answered. Shared with cc5_uitab."""
     out["window_open"] = bool(_call(window, "isVisible", False))
     if p["screenshot"] and out["window_open"]:
         shot = cc5_uiview.grab_png(window, p["max_width"])
@@ -434,7 +441,6 @@ def _report(p: dict[str, Any], window: Any, button: Any, before: bool | None, st
             out["screenshot_error"] = shot.get("error", "no picture")
     dialogs = cc5_uiview.ui_windows({"screenshot": p["screenshot"], "max_width": min(p["max_width"], DIALOG_SHOT_WIDTH)})
     out["dialogs"] = dialogs.get("windows", [])
-    return out
 
 
 def ui_click(body: dict[str, Any] | None = None) -> dict[str, Any]:
