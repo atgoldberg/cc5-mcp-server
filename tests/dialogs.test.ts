@@ -57,6 +57,13 @@ describe("isSensitiveDialog", () => {
     ["Activation", ["Activate this product"], []],
     ["Store", ["Purchase this pack?"], ["Buy", "Cancel"]],
     ["Store", ["Your order"], ["Checkout"]],
+    ["Store", ["Order now"], []],
+    ["Store", ["Order summary"], ["Place order"]],
+    ["Store", ["Order ID: 12"], []],
+    ["History", ["Sort orders"], []],
+    ["Layers", ["Sort"], ["Order"]],
+    ["Layers", ["Sort order"], ["Place order"]],
+    ["Physics", ["Activate Physics?"], ["OK"]],
     ["Store", ["2 items in your cart"], []],
     ["Store", ["Price: 5 USD"], ["Pay"]],
     ["Content", ["This costs 5 credits"], []],
@@ -82,6 +89,8 @@ describe("isSensitiveDialog", () => {
     ["確認", ["削除しますか"], []],
     ["Unsaved project", ["Save?"], ["Yes", "No"]],
     ["Cartoon", ["Border", "Display"], ["Reorder"]],
+    ["Layers", ["Sort Order", "Draw order:", "Render order", "Layer Order"], ["Order by name"]],
+    ["Bake", ["In order to continue, save the project."], ["OK"]],
   ])("no longer flags %s (allowed since 2026-11-19)", (title, texts, buttons) => {
     expect(isSensitiveDialog({ title, texts: texts as string[], buttons: buttons as string[] })).toBe(false);
   });

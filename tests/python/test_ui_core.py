@@ -46,6 +46,54 @@ class ForbiddenWordsTest(unittest.TestCase):
         self.assertIsNone(cc5_ui.forbidden_match("Save Wrap Points"))
         self.assertIsNone(cc5_ui.forbidden_match("Generate wrap points on the mesh"))
 
+    def test_order_is_money_except_in_the_sequence_phrases(self) -> None:
+        for text in ("Order now", "Place Order", "Your order", "Order summary", "Order ID: 12", "Orders", "Sort orders",
+                     "2 orders", "Order", "Confirm your order", "Re-order", "Order to go", "In order", "Resort order"):
+            self.assertEqual(cc5_ui.forbidden_match(text), ("order", "money"), text)
+        for text in ("Sort Order", "sort order:", "Draw Order", "Render order", "Layer Order", "Order by name",
+                     "Order By", "In order to continue, save first", "Reorder", "Reorder layers", "Border", "Ordering"):
+            self.assertIsNone(cc5_ui.forbidden_reason(text), text)
+        # an allowed phrase does not hide another "order", or any other money word
+        self.assertEqual(cc5_ui.forbidden_reason("Sort order of your order"), "order")
+        self.assertEqual(cc5_ui.forbidden_reason("Sort order - Buy now"), "buy")
+        self.assertEqual(cc5_ui.forbidden_reason("In order to continue, purchase a licence"), "purchas")
+
+    def test_an_order_phrase_must_stand_in_one_piece_of_text(self) -> None:
+        self.assertEqual(cc5_ui.forbidden_reason("Sort", "Order"), "order")           # two parts: two pieces
+        self.assertIsNone(cc5_ui.forbidden_reason("Sort order", "qtSortButton"))
+        self.assertEqual(cc5_ui.forbidden_reason("Sort Order", order_parts=["Sort", "Order"]), "order")
+        self.assertIsNone(cc5_ui.forbidden_reason("Sort Order", order_parts=["Sort\n Order"]))    # one label, two lines
+
+    def test_activation_in_a_window_text_is_always_money(self) -> None:
+        for text in ("Activate Physics", "Activate Expression Wrinkles", "Deactivate Mirror", "Activation", "Reactivate"):
+            self.assertEqual(cc5_ui.forbidden_match(text)[1], "money", text)
+
+    def test_activation_on_a_control_needs_a_licence_word_or_to_stand_alone(self) -> None:
+        refused = (("Activate",), ("Activation",), ("&Activate",), ("Activate...",), ("Deactivate",), ("Reactivate",),
+                   ("Activate now",), ("Activate / Deactivate",), ("", "qtActivateButton"), ("", "qtActivationToolButton"),
+                   ("Activate Product",), ("Activate your license",), ("Online Activation",), ("Activate with serial",),
+                   ("Enter activation key",), ("Activation Code",), ("Activate Trial",), ("Activate Account",),
+                   ("Activate subscription",), ("Activate purchased items",), ("Deactivate this product",),
+                   ("Activate Physics", "qtActivateProductKeyButton"), ("Activate Physics", "", "Needs an online account"),
+                   ("Acti vate Physics",), ("Act<b>ivate</b> Physics",), ("OK", "", "Activate"))
+        for parts in refused:
+            self.assertIsNotNone(cc5_ui.forbidden_reason(*parts, control=True), parts)
+        allowed = (("Activate Physics",), ("Activate Expression Wrinkles",), ("Deactivate Mirror",),
+                   ("Activate Editor", "qtActivateEditorCheckBox"), ("Activate Soft Cloth", "", "Activate soft cloth physics"),
+                   ("Reactivate Layer",), ("Activate Keyframe",), ("Activate Hotkeys",), ("", "qtActivatePhysicsButton"),
+                   ("Activated morphs",), ("Active",), ("Interactive mode",))
+        for parts in allowed:
+            self.assertIsNone(cc5_ui.forbidden_reason(*parts, control=True), parts)
+            self.assertIsNone(cc5_ui.activation_reason(*parts), parts)
+        self.assertEqual(cc5_ui.forbidden_match("Activate", control=True), ("activat", "money"))
+        # the control rule narrows nothing else, and the Japanese words stay as they were
+        for text in ("Activate Physics - Buy", "Upgrade", "License", "Start Trial", "有効化", "アクティベーション"):
+            self.assertIsNotNone(cc5_ui.forbidden_reason(text, control=True), text)
+        # ignore= is only for an allowlisted control: the word alone is let through, every other word is not
+        ignore = frozenset({cc5_ui.ACTIVATION_WORD})
+        self.assertIsNone(cc5_ui.forbidden_reason("Activate", control=True, ignore=ignore))
+        self.assertEqual(cc5_ui.forbidden_reason("Activate license", control=True, ignore=ignore), "licen")
+
     def test_disguised_words(self) -> None:
         for text in ("LİCENSE", "TRİAL", "Lic\u00adense", "Ｌｉｃｅｎｓｅ", "Lic ense", "Lic<b>ense</b>"):
             self.assertIsNotNone(cc5_ui.forbidden_reason(cc5_ui.clean_text(text)), text)
@@ -596,6 +644,19 @@ class HardeningTest(UiTestCase):
         fake_qt.Label("fine " * (cc5_ui.MAX_FULL_CHARS // 5 + 50), dlg)
         fake_qt.PushButton("Buy Now", dlg)
         self.assertEqual(cc5_ui.describe_window(dlg, self.q)["needs_human"], "text too long to check")
+
+    def test_order_in_a_window_is_judged_label_by_label(self) -> None:
+        def needs(title: str, text: str, buttons: list[str]) -> object:
+            return cc5_ui.describe_window(self.dialog(title, text, buttons), self.q)["needs_human"]
+
+        self.assertIsNone(needs("Layers", "Sort Order", ["OK"]))
+        self.assertIsNone(needs("Layers", "In order to continue, save the project.", ["OK"]))
+        self.assertIsNone(needs("Draw Order", "Choose the render order", ["Order by name", "Cancel"]))
+        self.assertEqual(needs("Layers", "Sort", ["Order", "Cancel"]), "order")        # two labels are no phrase
+        self.assertEqual(needs("Sort", "Order now?", ["OK"]), "order")
+        self.assertEqual(needs("Store", "Your order", ["OK"]), "order")
+        self.assertEqual(needs("Layers", "Sort order", ["Place order"]), "order")
+        self.assertIsNotNone(needs("Physics", "Activate Physics?", ["OK"]))             # a window: unchanged
 
     def test_more_words_in_more_languages(self) -> None:
         for text in ("You bought this", "Billing details", "Product key", "Lizenz abgelaufen", "Acheter maintenant",

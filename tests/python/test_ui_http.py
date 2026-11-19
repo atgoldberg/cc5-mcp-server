@@ -105,7 +105,7 @@ class UiOverHttpTest(unittest.TestCase):
     def test_every_ui_route_is_registered_on_the_real_server(self) -> None:
         for path in ("/ui/windows", "/ui/widgets", "/ui/job", "/ui/capture_crop", "/ui/skingen/state",
                      "/ui/skingen/editor", "/ui/skingen/layer", "/ui/preset/list", "/ui/preset/apply",
-                     "/ui/click", "/ui/tab"):
+                     "/ui/click", "/ui/tab", "/ui/value"):
             self.assertIn(path, server.POST_ROUTES)
             self.assertNotEqual(server.POST_ROUTES[path], "ui_modules_missing", path)
 
@@ -217,6 +217,31 @@ class UiOverHttpTest(unittest.TestCase):
             self.assertEqual(status, 400, data)
             self.assertIn(needle, data["error"])
         self.assertEqual(tabs.set_calls, [1])
+
+    def test_value_reads_at_once_sets_as_a_job_and_refusals_are_400(self) -> None:
+        win = fake_qt.Widget(name="ModifyWindow", title="Modify Panel")
+        win._is_window = True
+        render = fake_qt.SpinBox(fake_qt.Widget(name="qtRenderComboSpinBox", parent=win), name="qtSpinBox", value=0, lo=0, hi=2)
+        preview = fake_qt.SpinBox(fake_qt.Widget(name="qtPreviewComboSpinBox", parent=win), name="qtSpinBox", value=1, lo=0, hi=2)
+        self.q.app.tops.append(win)
+        self.addCleanup(self.q.app.tops.remove, win)
+        body = {"window": "Modify Panel", "object_name": "qtSpinBox", "ancestor": "qtRenderComboSpinBox"}
+        status, data = self.request("/ui/value", {**body, "read_only": True})
+        self.assertEqual(status, 200, data)
+        self.assertNotIn("job_id", data["result"])
+        self.assertEqual((data["result"]["widget"]["value"], data["result"]["widget"]["maximum"]), (0, 2))
+        status, data = self.request("/ui/value", {**body, "value": 2, "wait_ms": 200})
+        self.assertEqual(status, 200, data)
+        result = self.wait_job(data["result"]["job_id"])["result"]
+        self.assertTrue(result["success"], result)
+        self.assertEqual((result["value_before"], result["value_after"], render.value(), preview.value()), (0, 2, 2, 1))
+        self.assertTrue(result["png_base64"])
+        for extra, needle in (({"value": 3}, "outside the range"), ({"value": 1, "ancestor": None}, "2 visible input widgets"),
+                              ({"value": 1, "press": "OK"}, "unknown argument")):
+            status, data = self.request("/ui/value", {**body, **extra})
+            self.assertEqual(status, 400, data)
+            self.assertIn(needle, data["error"])
+        self.assertEqual((render.set_calls, preview.set_calls), ([2], []))
 
 
 if __name__ == "__main__":

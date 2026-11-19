@@ -193,6 +193,41 @@ class RefusalTest(ClickTestCase):
         self.assertIsNone(cc5_uiclick.deny_reason("Generate Wrap Points", skip_words=frozenset({"point"})))
         self.assertEqual(cc5_uiclick.deny_reason("Generate Wrap Points"), "point")
 
+    def test_feature_switches_with_activate_are_pressed_and_licence_ones_are_not(self) -> None:
+        for i, label in enumerate(("Activate Physics", "Activate Expression Wrinkles", "Deactivate Mirror",
+                                   "Activate Editor", "Reactivate Layer")):
+            with self.subTest(label=label):
+                button = fake_qt.PushButton(label, self.win, name=f"qtOn{i}")
+                self.assertTrue(self.run_click(object_name=f"qtOn{i}")["success"])
+                self.assertEqual(button.clicks, 1)
+        for i, (label, name, tip) in enumerate((("Activate", "", ""), ("Activation", "", ""), ("Activate Now", "", ""),
+                                                ("Activate Product", "", ""), ("Online Activation", "", ""),
+                                                ("Activate License", "", ""), ("Enter Activation Key", "", ""),
+                                                ("Activate Physics", "qtActivateSerialButton", ""),
+                                                ("Activate Physics", "", "Activate your account first"),
+                                                ("", "qtActivateToolButton", ""), ("Acti vate Physics", "", ""))):
+            with self.subTest(label=label, name=name, tip=tip):
+                button = fake_qt.PushButton(label, self.win, name=name or f"qtOff{i}")
+                button._tooltip = tip
+                self.assert_refused(self.click(object_name=name or f"qtOff{i}"), "refused", "mentions")
+                self.assertEqual(button.clicks, 0)
+
+    def test_sort_order_buttons_are_pressed_and_order_now_is_not(self) -> None:
+        for i, label in enumerate(("Sort Order", "Draw Order", "Render Order", "Layer Order", "Order by Name",
+                                   "Reorder", "In order to bake, press here")):
+            with self.subTest(label=label):
+                button = fake_qt.PushButton(label, self.win, name=f"qtSeq{i}")
+                self.assertTrue(self.run_click(object_name=f"qtSeq{i}")["success"])
+                self.assertEqual(button.clicks, 1)
+        for i, (label, tip) in enumerate((("Order Now", ""), ("Place Order", ""), ("Your Order", ""),
+                                          ("Order Summary", ""), ("Order ID", ""), ("Orders", ""), ("Sort Orders", ""),
+                                          ("Sort", "Order"), ("Sort Order", "Place your order"))):
+            with self.subTest(label=label, tip=tip):
+                button = fake_qt.PushButton(label, self.win, name=f"qtNo{i}")
+                button._tooltip = tip
+                self.assert_refused(self.click(object_name=f"qtNo{i}"), "mentions 'order'")
+                self.assertEqual(button.clicks, 0)
+
     def test_ordinary_buttons_are_not_caught_by_the_short_words(self) -> None:
         for label in ("Display", "Replay", "Repaint", "Detect Joints", "Paste", "Save Skeleton", "Load Skeleton",
                       "Bake Textures", "Create CC Actor", "Refine Mesh", "Generate Skeleton", "OK", "Cancel",
@@ -266,6 +301,94 @@ class RefusalTest(ClickTestCase):
         self.run_click(window="Save Skeleton", text="Cancel")
         cancel = [b for b in dlg.findChildren(fake_qt.PushButton) if b.text() == "Cancel"][0]
         self.assertEqual((self.paste.clicks, cancel.clicks), (0, 1))
+
+
+class AllowlistTest(ClickTestCase):
+    """cc5_uiclick.ALLOWLIST: exact controls that may ignore ONE named word (the Body Wrap entries are tested
+    above and in MenuTest; here: the table itself and the Expression Wrinkles check box)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.main = fake_qt.MainWindow(name="MainWindow", title="Character Creator 5 - test.ccProject")
+        self.q.app.tops.append(self.main)
+        self.dock = fake_qt.DockWidget(name="qtModifyDock", title="Modify", parent=self.main)
+        self.box = fake_qt.CheckBox("Activate Expression Wrinkles", self.dock, name="qtActiveWrinkleCheckBox")
+        self.box._tooltip = "Activate"                       # alone, this word refuses any other control
+
+    def test_the_table_is_the_agreed_one(self) -> None:
+        rows = {(e.window_title, e.window_object_name, e.kind, e.object_name, e.text, tuple(sorted(e.ignore)))
+                for e in cc5_uiclick.ALLOWLIST}
+        points = ("point", "ポイント")
+        self.assertEqual(rows, {
+            ("body wrap", None, "control", None, "generate wrap points", points),
+            ("body wrap", None, "control", None, "align points", points),
+            ("body wrap", None, "menu_entry", None, "save wrap points", points),
+            ("body wrap", None, "menu_entry", None, "load wrap points", points),
+            (None, "MainWindow", "control", "qtActiveWrinkleCheckBox", "activate expression wrinkles", ("activat",)),
+        })
+        for entry in cc5_uiclick.ALLOWLIST:
+            self.assertTrue(entry.window_title or entry.window_object_name)
+            self.assertTrue(entry.text and entry.why)
+            self.assertEqual(entry.text, cc5_uiclick.label_key(entry.text))
+            if entry.window_title != "body wrap":            # only the old Body Wrap rows may leave the objectName open
+                self.assertTrue(entry.object_name)
+        self.assertEqual(cc5_uiclick.POINT_EXCEPTION_BUTTONS, {"generate wrap points", "align points"})
+        self.assertEqual(cc5_uiclick.POINT_EXCEPTION_MENU_ENTRIES, {"save wrap points", "load wrap points"})
+
+    def test_the_wrinkle_check_box_is_pressed_from_the_main_window_or_its_dock_panel(self) -> None:
+        self.assertTrue(self.run_click(window="MainWindow", object_name="qtActiveWrinkleCheckBox")["success"])
+        self.assertTrue(self.run_click(window="Modify", text="activate expression wrinkles")["success"])
+        self.assertEqual(self.box.clicks, 2)
+        self.assertEqual(cc5_uiclick.allowlist_ignores(self.dock, "qtActiveWrinkleCheckBox", "Activate Expression Wrinkles"),
+                         {"activat"})
+
+    def test_a_similar_control_stays_refused(self) -> None:
+        cases = (("qtActiveWrinkleCheckBox2", "Activate Expression Wrinkles"),        # another objectName
+                 ("qtActiveWrinkleCheckBox", "Activate Expression Wrinkles Pro"),     # another text
+                 ("qtactivewrinklecheckbox", "Activate Expression Wrinkles"))         # the objectName is case-sensitive
+        self.box._visible = False
+        for name, text in cases:
+            with self.subTest(name=name, text=text):
+                twin = fake_qt.CheckBox(text, self.dock, name=name)
+                twin._tooltip = "Activate"
+                self.assert_refused(self.click(window="MainWindow", object_name=name), "mentions 'activat'")
+                self.assertEqual(twin.clicks, 0)
+                twin._visible = False
+        self.assertEqual(cc5_uiclick.allowlist_ignores(self.dock, "qtActiveWrinkleCheckBox", "Activate"), frozenset())
+        self.assertEqual(cc5_uiclick.allowlist_ignores(None, "qtActiveWrinkleCheckBox", "Activate Expression Wrinkles"),
+                         frozenset())
+
+    def test_the_entry_is_only_for_the_main_window(self) -> None:
+        same = fake_qt.CheckBox("Activate Expression Wrinkles", self.win, name="qtActiveWrinkleCheckBox")
+        same._tooltip = "Activate"
+        self.assert_refused(self.click(window="Body Wrap", object_name="qtActiveWrinkleCheckBox"), "mentions 'activat'")
+        self.assertEqual(same.clicks, 0)
+
+    def test_every_other_word_still_refuses_the_allowlisted_control(self) -> None:
+        for tip, word in (("Activate your licence", "licen"), ("Costs 5 credits", "credit"), ("Buy the wrinkle pack", "buy"),
+                          ("Uses AI points", "point")):
+            with self.subTest(tip=tip):
+                self.box._tooltip = tip
+                self.assert_refused(self.click(window="MainWindow", object_name="qtActiveWrinkleCheckBox"), "refused", word)
+        self.assertEqual(self.box.clicks, 0)
+
+    def test_an_entry_never_presses_while_a_money_or_agreement_window_is_open(self) -> None:
+        for title, text in (("Activation", "Activate this product online?"), ("Terms of Use", "Read")):
+            with self.subTest(title=title):
+                dlg = self.dialog(title, text, ["OK", "Cancel"])
+                self.assert_refused(self.click(window="MainWindow", object_name="qtActiveWrinkleCheckBox"),
+                                    "a person must decide")
+                self.q.app.tops.remove(dlg)
+        gen = fake_qt.PushButton("Generate Wrap Points", self.win, name="qtGenerateWrapPointsButton")
+        self.dialog("Store", "Use DA Points?", ["OK"])
+        self.assert_refused(self.click(text="Generate Wrap Points"), "a person must decide")
+        self.assertEqual((self.box.clicks, gen.clicks), (0, 0))
+
+    def test_structural_refusals_stay_for_an_allowlisted_control(self) -> None:
+        self.box._enabled = False
+        self.assert_refused(self.click(window="MainWindow", object_name="qtActiveWrinkleCheckBox"), "disabled")
+        self.box._enabled, self.box._visible = True, False
+        self.assert_refused(self.click(window="MainWindow", object_name="qtActiveWrinkleCheckBox"), "is hidden")
 
 
 class UnsavedBoxTest(ClickTestCase):

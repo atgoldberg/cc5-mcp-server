@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { bridgeCall, isEnvFlagEnabled } from "../src/util.js";
+import { bridgeCall, bridgeCallRich, isEnvFlagEnabled } from "../src/util.js";
+import { CC5StillWorkingError } from "../src/cc5-bridge.js";
 
 describe("isEnvFlagEnabled", () => {
   it("is false when the variable is not set", () => {
@@ -36,6 +37,21 @@ describe("bridgeCall", () => {
     );
     expect(result.content[0].text).toContain("CC5 bridge error: timeout");
     expect(result.content[0].text).toContain("Is CC5 running");
+  });
+
+  it("shows a long command's 'no answer yet' as it is, without asking whether CC5 is running", async () => {
+    const result = await bridgeCall(
+      () => Promise.reject(new CC5StillWorkingError("FBX export to D:/out/a.fbx", 300)),
+      () => "should not reach"
+    );
+    const text = result.content[0].text;
+    expect(text).toContain("No answer from CC5 after 300 s (FBX export to D:/out/a.fbx)");
+    expect(text).toContain("CC5 may still be working");
+    expect(text).toContain("Check the output folder");
+    expect(text).not.toContain("Is CC5 running");
+    expect(text).not.toContain("aborted");
+    const rich = await bridgeCallRich(() => Promise.reject(new CC5StillWorkingError("saving", 310)), () => []);
+    expect(rich.content).toEqual([{ type: "text", text: expect.stringContaining("Do NOT send the request again yet") }]);
   });
 
   it("returns CC5 bridge error text when fn rejects with a string", async () => {

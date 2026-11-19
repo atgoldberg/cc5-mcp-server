@@ -57,17 +57,23 @@ export function registerUiClickTools(server: McpServer, bridge: CC5Bridge, wait:
       "include_other=true for floating tool windows such as Body Wrap). For a button with a drop-down menu " +
       "(like the disk button with Load / Save Skeleton) give menu_item to press one entry. CC5 refuses, and " +
       "presses nothing, when: nothing or more than one VISIBLE button matches; the button or entry is disabled " +
-      "or hidden; its text, objectName or tool tip is about spending money -- points, buy, purchase, order, " +
-      "checkout, cart, credit, subscribe, pay, price, upgrade, trial, activate, licence (or ポイント 購入 " +
+      "or hidden; its text, objectName or tool tip is about spending money -- points, buy, purchase, " +
+      "checkout, cart, credit, subscribe, pay, price, upgrade, trial, licence, " +
+      "'order' (but not 'sort order', 'draw order', 'render order', 'layer order', 'order by'), 'activate' " +
+      "next to a licence / product / serial / key / online / account word or standing alone (or ポイント 購入 " +
       "ライセンス クレジット 支払) -- or about accepting terms / an agreement / a EULA; a window about those " +
       "(purchase, licence, activation, terms) is open; a modal window is open and the button is not in it. " +
-      "Since 2026-11-19 nothing else is refused by word: delete, remove, login and update buttons ARE " +
-      "pressed, so read the window first and be sure. Waits wait_ms, then returns a picture of the window and the dialogs that are open " +
+      "Nothing else is refused by word (the owner's money-only rule of 2026-11-19): delete, remove, login and " +
+      "update buttons ARE pressed, and so are feature switches such as 'Activate Physics', so read the window " +
+      "first and be sure. A few exact controls are pressed although one such word matches " +
+      "(the bridge's allowlist): in the window 'Body Wrap' the buttons 'Generate Wrap Points' and 'Align " +
+      "Points' and the menu entries 'Save Wrap Points' / 'Load Wrap Points'; in the main window the check " +
+      "box 'Activate Expression Wrinkles' (qtActiveWrinkleCheckBox). Waits wait_ms, then returns a picture of the window and the dialogs that are open " +
       "(a window the click opened is never answered: look at it, and ask the owner when it is not routine). " +
       "Do not use it to get past a refusal of another tool.",
     {
       window: nameField.describe("Title (case-insensitive) or objectName of the CC5 window, dialog or dock panel"),
-      object_name: nameField.optional().describe("Exact objectName of the button"),
+      object_name: nameField.optional().describe("Exact objectName of the button (a check box counts as a button; to set a spin box, slider, combo box or text use set_ui_value)"),
       text: nameField.optional().describe("Exact visible text of the button (case and the & marker are ignored)"),
       menu_item: nameField.optional().describe("Exact text of one entry in the button's own drop-down menu (presses that entry, not the button)"),
       wait_ms: z.number().int().min(200).max(15000).optional().describe(`Wait after the click before the picture (default ${DEFAULT_WAIT_MS})`),

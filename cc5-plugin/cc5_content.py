@@ -39,12 +39,13 @@ PRESET_FOLDERS: dict[str, list[str]] = {
 SKIP_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".db", ".json", ".xml", ".txt", ".ini"}
 # The ONLY file types apply_preset loads (lower case). Anything that replaces the scene or the
 # character (.ccProject, .ccAvatar, .iAvatar, FBX, ...) is not on the list on purpose; a type that
-# is missing here can be added by editing this set. .rlwrinkle (expression-wrinkle presets, added
-# 2026-11-19) is a preset for the avatar that is there, not a scene or a character.
+# is missing here can be added by editing this set. .rlwrinkle was on the list for one batch (2026-11-19)
+# and was taken off again: in CC 5.2 RFileIO.LoadFile reports an error for it. Expression wrinkles are
+# switched on from the Modify panel's Expression Wrinkles tab instead (select_ui_tab, set_ui_value).
 ALLOWED_APPLY_EXTS = frozenset({
     ".ccavatarpreset", ".ccskingenpreset", ".rleyelashelement", ".rlhairelement", ".rlhairstyle", ".rlhair",
     ".cchair", ".cccloth", ".ccshoes", ".ccacc", ".ccfacialprofile", ".cccustomslider", ".imtl",
-    ".italk", ".imotionplus", ".rlmotion", ".rlwrinkle",
+    ".italk", ".imotionplus", ".rlmotion",
 })
 
 LIST_DEFAULT_LIMIT = 200

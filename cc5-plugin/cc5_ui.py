@@ -15,7 +15,8 @@ docs/ui-automation-test-steps_ja.md):
   * read the visible windows (title, text, buttons, check boxes) as plain data.
 
 Companions: cc5_uiview.py (widget finder, window pictures, framed capture), cc5_skingen.py,
-cc5_content.py, cc5_uiclick.py (press one named button), cc5_uitab.py (bring one tab to the front).
+cc5_content.py, cc5_uiclick.py (press one named button), cc5_uitab.py (bring one tab to the front),
+cc5_uivalue.py (set the value of one input widget).
 All are loaded by cc5_api (_load_ui_modules); none may import cc5_api at module level. PySide2 is
 imported lazily (_qt) so the logic runs in tests.
 """
@@ -88,8 +89,40 @@ MONEY_STEMS = (
     "cost", "deduct", "charge", "charging", "spend", "spent",
 )
 # Short words, matched as whole words only, with an optional plural s ('cart' is not 'cartoon',
-# 'order' is not 'border', 'pay' is not 'display').
+# 'order' is not 'border', 'pay' is not 'display'). "order" has its own, narrower rule: see ORDER_* below.
 MONEY_WORDS = ("pay", "paid", "price", "pricing", "order", "cart", "credit")
+
+# NARROWED RULE 1 (2026-11-19, the owner's fix list): the whole word "order". It is money as in "Order now",
+# "Place order", "Your order", "Order summary", "Order ID" and always in the plural ("orders"), but NOT in
+# these phrases, where it means a sequence: "sort order", "draw order", "render order", "layer order",
+# "order by" and "in order to". ("reorder" was never matched: "order" must start a word.) The phrase must
+# stand inside ONE piece of text (one label, one button text) with single spaces; "Sort" on one button and
+# "Order" on the next is still "order". Nothing else about the MONEY group changed.
+ORDER_PHRASES_BEFORE = ("sort", "draw", "render", "layer")      # "<word> order"
+ORDER_PHRASES_AFTER = ("by",)                                    # "order <word>"; plus "in order to"
+_ORDER_RE = re.compile(
+    r"(?<![a-z0-9])(?:orders(?![a-z0-9])|"
+    + "".join(rf"(?<!(?<![a-z0-9]){word} )" for word in ORDER_PHRASES_BEFORE)
+    + r"order(?![a-z0-9])"
+    + "".join(rf"(?! {word}(?![a-z0-9]))" for word in ORDER_PHRASES_AFTER)
+    + r"(?!(?<=(?<![a-z0-9])in order) to(?![a-z0-9])))")
+
+# NARROWED RULE 2 (same date): "activat" on a CONTROL (a button, a menu entry, a tab, an input widget).
+# A WINDOW is unchanged: any "activat" in a window's text still makes it a MONEY window, because windows
+# are where licence activation prompts appear. On a control the word is money only when
+#   * the control's text, objectName or tool tip also has a licence / product word (ACTIVATION_CONTEXT_*), or
+#   * one of those parts says nothing else ("Activate", "Activation", "Deactivate", "Activate now",
+#     "qtActivateButton": no feature is named, so it cannot be told from a licence button), or
+#   * the word is disguised ("Acti vate", "Act<b>ivate</b>").
+# Ordinary feature switches ("Activate Physics", "Activate Expression Wrinkles", "Deactivate Mirror") are
+# allowed. The Japanese words 有効化 / アクティベ are not narrowed.
+ACTIVATION_STEMS = ("activat", "deactivat", "reactivat")
+ACTIVATION_CONTEXT_STEMS = ("licen", "product", "serial", "online", "purchas", "trial", "subscri", "account")
+ACTIVATION_CONTEXT_WORDS = ("key", "code")                       # whole words, optional plural s
+# Words that name no feature: a label made of an activation word and these only is still "alone".
+ACTIVATION_FILLER = frozenset({"qt", "button", "btn", "tool", "push", "check", "box", "checkbox", "radio", "action",
+                               "tab", "now", "here", "it", "this", "please", "the"})
+ACTIVATION_WORD = "activat"                                      # the name the refusal (and the allowlist) uses
 # Strong stems also searched with spaces and punctuation removed ('Lic ense', 'Lic<b>ense</b>').
 MONEY_COMPACT_STEMS = ("licen", "purchas", "subscri", "payment", "checkout")
 # Japanese / Korean / Chinese: no word boundaries, matched anywhere (after norm(), which drops the dakuten marks).
@@ -111,10 +144,14 @@ def _stem_re(stems: tuple[str, ...], words: tuple[str, ...] = ()) -> Any:
     return re.compile(r"(?<![a-z0-9])(?:" + "|".join(parts) + ")") if parts else None
 
 
+_ACTIVATION_CONTEXT_RE = _stem_re(ACTIVATION_CONTEXT_STEMS, ACTIVATION_CONTEXT_WORDS)
+_CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
 # (group name, word regex, compact needles, anywhere needles); MONEY is looked at first.
+# "order" is left out of the word regex: _ORDER_RE looks at it, piece by piece (see forbidden_match).
 _GROUPS = (
-    ("money", _stem_re(MONEY_STEMS, MONEY_WORDS), tuple(norm(s) for s in MONEY_COMPACT_STEMS),
-     tuple(norm(s) for s in MONEY_CJK)),
+    ("money", _stem_re(MONEY_STEMS, tuple(w for w in MONEY_WORDS if w != "order")),
+     tuple(norm(s) for s in MONEY_COMPACT_STEMS), tuple(norm(s) for s in MONEY_CJK)),
     ("agreement", _stem_re(AGREEMENT_STEMS), tuple(norm(s) for s in AGREEMENT_COMPACT_STEMS),
      tuple(norm(s) for s in AGREEMENT_CJK)),
 )
@@ -122,14 +159,55 @@ POLICY_SUMMARY = ("spending money (points, buying, ordering, paying, prices, cre
                   "trials, licences / activation) or accepting terms / an agreement")
 
 
-def forbidden_match(*parts: Any) -> tuple[str, str] | None:
-    """(word, group) for the first MONEY or AGREEMENT word in the text, or None. group is "money" or "agreement"."""
+def _words(part: Any) -> list[str]:
+    """The words of one piece of text, camelCase split ('qtActivateButton' -> qt, activate, button)."""
+    plain = unicodedata.normalize("NFKD", clean_text(part))
+    return [w for w in re.split(r"[\W_]+", norm(_CAMEL_RE.sub(" ", plain))) if w]
+
+
+def activation_reason(*parts: Any) -> str | None:
+    """ACTIVATION_WORD when a CONTROL's text / objectName / tool tip is about licence activation, else None
+    (NARROWED RULE 2 above). Each part is one piece; the licence / product words are looked for in all of them."""
+    alone = found = False
+    for part in parts:
+        if not part:
+            continue
+        compact = re.sub(r"[\W_]+", "", norm(_squash_tags(part)))
+        if ACTIVATION_WORD not in compact and ACTIVATION_WORD not in re.sub(r"[\W_]+", "", norm(clean_text(part))):
+            continue
+        found = True
+        words = [w for w in _words(part) if w not in ACTIVATION_FILLER]
+        hits = [w for w in words if ACTIVATION_WORD in w]
+        if not hits or len(hits) == len(words):   # disguised ("Acti vate"), or nothing but the word itself
+            alone = True
+    if not found:
+        return None
+    if alone or _ACTIVATION_CONTEXT_RE.search(" ".join(" ".join(_words(part)) for part in parts if part)):
+        return ACTIVATION_WORD
+    return None
+
+
+def forbidden_match(*parts: Any, order_parts: Any = None, control: bool = False,
+                    ignore: frozenset[str] = frozenset()) -> tuple[str, str] | None:
+    """(word, group) for the first MONEY or AGREEMENT word in the text, or None. group is "money" or "agreement".
+
+    order_parts: the pieces of text (labels, button texts) in which "order" is looked for, when `parts` is one
+    long joined text (a window); default: each of `parts` is a piece. control=True is for ONE control (button,
+    menu entry, tab, input widget): "activat" then follows NARROWED RULE 2 (activation_reason) instead of
+    counting anywhere. ignore: only {ACTIVATION_WORD}, for an allowlisted control (cc5_uiclick.ALLOWLIST)."""
     text = norm(" ".join(str(p) for p in parts if p))
     compact = re.sub(r"[\W_]+", "", text)
+    pieces = [" ".join(norm(piece).split()) for piece in (parts if order_parts is None else order_parts) if piece]
+    skip_stems = ACTIVATION_STEMS if control or ACTIVATION_WORD in ignore else ()
     for group, word_re, compact_needles, anywhere in _GROUPS:
-        match = word_re.search(text) if word_re is not None else None
-        if match:
-            return match.group(0).strip(), group
+        for match in (word_re.finditer(text) if word_re is not None else ()):
+            if match.group(0) not in skip_stems:
+                return match.group(0).strip(), group
+        if group == "money":
+            if control and ACTIVATION_WORD not in ignore and activation_reason(*parts):
+                return ACTIVATION_WORD, group
+            if any(_ORDER_RE.search(piece) for piece in pieces):
+                return "order", group
         for needle in compact_needles:
             if needle in compact:
                 return needle, group
@@ -139,9 +217,11 @@ def forbidden_match(*parts: Any) -> tuple[str, str] | None:
     return None
 
 
-def forbidden_reason(*parts: Any) -> str | None:
-    """The word that makes a window off limits (money or an agreement; see MONEY_* / AGREEMENT_*), or None."""
-    found = forbidden_match(*parts)
+def forbidden_reason(*parts: Any, order_parts: Any = None, control: bool = False,
+                     ignore: frozenset[str] = frozenset()) -> str | None:
+    """The word that makes a window off limits (money or an agreement; see MONEY_* / AGREEMENT_*), or None.
+    The keyword arguments are those of forbidden_match."""
+    found = forbidden_match(*parts, order_parts=order_parts, control=control, ignore=ignore)
     return found[0] if found else None
 
 
@@ -158,6 +238,8 @@ def _qt() -> Any:
         QPushButton=QtWidgets.QPushButton, QToolButton=QtWidgets.QToolButton,
         QCheckBox=QtWidgets.QCheckBox, QRadioButton=QtWidgets.QRadioButton,
         QProgressBar=QtWidgets.QProgressBar, QSpinBox=QtWidgets.QSpinBox,
+        QDoubleSpinBox=QtWidgets.QDoubleSpinBox, QAbstractSpinBox=QtWidgets.QAbstractSpinBox,
+        QAbstractSlider=QtWidgets.QAbstractSlider, QSlider=QtWidgets.QSlider,
         QComboBox=QtWidgets.QComboBox, QTableWidget=QtWidgets.QTableWidget,
         QLineEdit=QtWidgets.QLineEdit, QTextEdit=QtWidgets.QTextEdit,
         QPlainTextEdit=QtWidgets.QPlainTextEdit, QGroupBox=QtWidgets.QGroupBox,
@@ -290,8 +372,11 @@ def describe_window(w: Any, q: Any = None) -> dict[str, Any]:
         other.append(clean_text(_safe(line.placeholderText, "")))    # window) no longer needs a person
     text = " ".join(labels)
     full = " ".join([title, text, *buttons, *(b["text"] for b in boxes), *other])
-    squashed = " ".join(_squash_tags(_safe(c.text, "")) for c in _safe(lambda: w.findChildren(q.QLabel), []))
-    needs_human = (forbidden_reason(full[:MAX_FULL_CHARS], squashed[:MAX_FULL_CHARS])
+    squashed_labels = [_squash_tags(_safe(c.text, "")) for c in _safe(lambda: w.findChildren(q.QLabel), [])]
+    squashed = " ".join(squashed_labels)
+    # "order" is judged label by label, so "Sort" and "Order" on two buttons do not read as "sort order"
+    pieces = [title, *labels, *buttons, *(b["text"] for b in boxes), *other, *squashed_labels]
+    needs_human = (forbidden_reason(full[:MAX_FULL_CHARS], squashed[:MAX_FULL_CHARS], order_parts=pieces)
                    or ("long text (a licence or terms?)" if long_text else None)
                    or ("text too long to check" if len(full) > MAX_FULL_CHARS else None))
     full = full[:MAX_FULL_CHARS]

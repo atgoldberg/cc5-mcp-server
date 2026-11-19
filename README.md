@@ -11,33 +11,66 @@ CC5.2 に対応しています。作者は毎日 CC5.2 で使っています(5.2
 
 ## Local changes in this fork
 
-Branch `piqsiq` differs from upstream (commit `a790fd8`) in three ways:
+Branch `piqsiq` differs from upstream (commit `a790fd8`) in these ways (the running list of wanted changes is
+[FORK-FIXES.md](FORK-FIXES.md)):
 
 1. **New tool `select_ui_tab`** (route `POST /ui/tab`, plugin module `cc5-plugin/cc5_uitab.py`): lists the tabs of a
    tab widget inside a CC5 window, or brings ONE tab to the front with Qt's `setCurrentIndex()`. It exists because
    `click_ui_button` (rightly) refuses hidden buttons, and a button such as Modify > "Subdivide" sits on a tab
    that may not be the front one. It never presses a button, answers a dialog or opens a menu, and has the same
    word-based refusals as `click_ui_button`. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab).
-2. **`apply_preset` also accepts `.rlWrinkle`** (expression-wrinkle presets). Nothing that replaces the scene or the
-   character was added to the list.
+2. **`apply_preset` does not take `.rlWrinkle`.** The extension was on the list for one batch and was taken off
+   again: in Character Creator 5.2 `RFileIO.LoadFile` reports an error for expression-wrinkle presets. Wrinkles
+   are switched on from the Modify panel's Expression Wrinkles tab instead (`select_ui_tab`, then
+   `set_ui_value` on the check box `qtActiveWrinkleCheckBox`).
 3. **The word-based refusals are money-only (2026-11-19).** Upstream's UI automation refused every button and
    window about points, buying, deleting / removing, licences, activation, upgrades, credits, subscriptions,
    payment, login, update, terms, trial and more. In this fork the owner relaxed that: `click_ui_button` and
-   `select_ui_tab` refuse, and a window blocks all presses and is flagged "needs a person", only for
+   `select_ui_tab` (and `set_ui_value`) refuse, and a window blocks all presses and is flagged "needs a person",
+   only for
    - **MONEY** -- spending or committing to spend: points, buy / purchase, order, checkout, cart, credit,
      subscribe / subscription, pay / payment, price, (paid) upgrade, trial, activate / activation, licence /
-     license (and the Japanese words 購入, 支払, ライセンス, クレジット, ポイント, ...);
+     license (and the Japanese words 購入, 支払, ライセンス, クレジット, ポイント, ...). Two of these words are
+     narrower since the second batch of 2026-11-19: **"order"** is not refused in "sort order", "draw order",
+     "render order", "layer order", "order by" and "in order to" (still refused: order now, place order, your
+     order, order summary, order ID, orders); **"activate"** on a button, menu entry, tab or input widget is
+     refused only next to a licence / product word (licen..., product, serial, key, online, purchas..., trial,
+     subscri..., account, code) or when the label names nothing else ("Activate", "Activation", "Deactivate",
+     "Activate now"), so "Activate Physics" and "Deactivate Mirror" are pressed. In a **window's** text any
+     "activat..." still counts, because windows are where licence activation prompts appear;
    - **AGREEMENT** -- accepting terms / an agreement / a EULA. This group is the lead's retained exception (an
      agreement can carry payment obligations); it is one named group so it can be removed later.
 
    **Now allowed:** delete, remove, login / sign in (a password field too), update, register, account, unlock,
    overwrite, install. A login or update window no longer blocks other presses. Unchanged: every structural
    refusal (ambiguous, hidden or disabled target, a foreign modal window, unknown arguments, length caps), the
-   Body Wrap "points" exception, `skingen_layer`'s `confirm_delete`, `save_project`, the exec gate, and the three
+   exact-control allowlist (below), `skingen_layer`'s `confirm_delete`, `save_project`, the exec gate, and the three
    windows that `apply_preset` / the SkinGen tools answer by themselves. The lists are in
-   `cc5-plugin/cc5_ui.py` (`MONEY_*`, `AGREEMENT_*`), `cc5-plugin/cc5_uiclick.py` (`DENY_WORDS`) and
-   `src/dialogs.ts` (`MONEY_PATTERNS`, `AGREEMENT_PATTERNS`). Note for readers of the upstream text: a delete or
-   overwrite button is pressed when asked, so read the window first.
+   `cc5-plugin/cc5_ui.py` (`MONEY_*`, `AGREEMENT_*`, `ORDER_*`, `ACTIVATION_*`), `cc5-plugin/cc5_uiclick.py`
+   (`DENY_WORDS`, `ALLOWLIST`) and `src/dialogs.ts` (`MONEY_PATTERNS`, `AGREEMENT_PATTERNS`). Note for readers of
+   the upstream text: a delete or overwrite button is pressed when asked, so read the window first.
+4. **An allowlist of exact controls** (`ALLOWLIST` in `cc5-plugin/cc5_uiclick.py`). One entry is one control:
+   the top-level window it sits in (title or objectName), its exact objectName and its exact visible text, and
+   the one refusal word it may ignore. An entry never widens a word rule (a control with a similar name stays
+   refused), every other money / agreement word still refuses the control, and nothing is pressed while a money
+   or agreement window is open. The table now:
+
+   | Window | Kind | objectName | Text | Ignores | Since |
+   |---|---|---|---|---|---|
+   | title "Body Wrap" | button | (any: never written down) | Generate Wrap Points | "point" / "ポイント" | 2026-10-31 |
+   | title "Body Wrap" | button | (any) | Align Points | "point" / "ポイント" | 2026-10-31 |
+   | title "Body Wrap" | menu entry | (any) | Save Wrap Points | "point" / "ポイント" | 2026-10-31 |
+   | title "Body Wrap" | menu entry | (any) | Load Wrap Points | "point" / "ポイント" | 2026-10-31 |
+   | objectName `MainWindow` | check box | `qtActiveWrinkleCheckBox` | Activate Expression Wrinkles | "activat..." | 2026-11-19 |
+5. **New tool `set_ui_value`** (route `POST /ui/value`, plugin module `cc5-plugin/cc5_uivalue.py`): reads ONE
+   input widget (spin box, slider, combo box, line edit, check box, radio button) or sets its value with the Qt
+   setters that send the normal change signals. Same window rules and word refusals as `click_ui_button`; a
+   value outside the widget's range is refused, never clamped. See
+   [Setting one input widget](#setting-one-input-widget-set_ui_value).
+6. **`export_fbx`, `export_obj` and `save_project` wait up to 300 s** for CC5 (the bridge and the MCP server
+   both; every other call keeps the 30 s default). A real export took longer than 30 s and the tool said "This
+   operation was aborted" although CC5 finished. When no answer comes in time the tool now says plainly that
+   CC5 may still be working and that the output folder should be checked.
 
 ## Architecture
 
@@ -52,9 +85,9 @@ The MCP server communicates with Claude via **stdio** transport and forwards com
 
 ## Features
 
-### MCP Tools (101)
+### MCP Tools (102)
 
-The MCP server provides 101 tools (registered in 24 modules under `src/tools/`) for controlling CC5. This list matches the code: there is one `server.tool(` call per tool in `src/tools/*.ts` (101 in total, all with unique names).
+The MCP server provides 102 tools (registered in 25 modules under `src/tools/`) for controlling CC5. This list matches the code: there is one `server.tool(` call per tool in `src/tools/*.ts` (102 in total, all with unique names).
 
 #### Scene & Avatar Management (8)
 | Tool | Description |
@@ -165,7 +198,7 @@ See [UI automation without the mouse](#ui-automation-without-the-mouse) for how 
 
 | Tool | Description |
 |------|-------------|
-| `apply_preset` | Apply preset file(s) to the avatar with `RFileIO.LoadFile`: eyelash presets (`.ccAvatarPreset`), eyelash strips (`.rlEyelashElement`), SkinGen makeup (`.ccSkinGenPreset`), expression-wrinkle presets (`.rlWrinkle`), hair, cloth, ... (a fixed list of types; never a project, character or FBX). Answers only the known question windows (Apply Character Preset / Eyelash Elements, add-or-replace layer, exit SkinGen editing mode) and reports every other window with a screenshot (a money / agreement window is for a person; any other one can then be answered with `click_ui_button`). Reports what was added/removed in the scene |
+| `apply_preset` | Apply preset file(s) to the avatar with `RFileIO.LoadFile`: eyelash presets (`.ccAvatarPreset`), eyelash strips (`.rlEyelashElement`), SkinGen makeup (`.ccSkinGenPreset`), hair, cloth, ... (a fixed list of types; never a project, character or FBX; not `.rlWrinkle` either: `LoadFile` cannot load expression-wrinkle presets in CC 5.2). Answers only the known question windows (Apply Character Preset / Eyelash Elements, add-or-replace layer, exit SkinGen editing mode) and reports every other window with a screenshot (a money / agreement window is for a person; any other one can then be answered with `click_ui_button`). Reports what was added/removed in the scene |
 | `list_presets` | List preset files that are on disk, by category (`eyelash_preset`, `eyelash_element`, `makeup_lip`, `makeup_eye`, `makeup_eyelash`, ...) or `$/...` content folder; `names` shows which wanted presets are missing (cloud items are not on disk) |
 | `skingen_state` | Read the SkinGen editor: on/off, tab, layers (visible / HIDDEN, selected) and the selected layer's opacity |
 | `skingen_editor` | Turn the SkinGen editor on/off; off bakes (~10 s), answers "exit SkinGen editing mode?" and waits until CC5 is quiet |
@@ -174,8 +207,9 @@ See [UI automation without the mouse](#ui-automation-without-the-mouse) for how 
 | `get_ui_job` | Look at or wait for a job the tools above started (use the job id from a "Still running" reply) |
 | `find_ui_widgets` | Read-only finder for CC5's own Qt widgets by objectName / class / text, to discover names for new automation |
 | `capture_framed_crop` | Frame a preset view, render it big (default 3600 px) and cut a fixed box, so options are compared at the same scale (does not depend on `dolly_camera`) |
-| `click_ui_button` | Press ONE named button of a CC5 window, dialog or dock panel with Qt's `click()` (works while the Windows screen is locked), or one entry of its drop-down menu (`menu_item`). Refuses ambiguous, hidden or disabled buttons and every button about spending money: points (except Body Wrap's exact "Generate Wrap Points" and "Align Points" and the menu entries "Save Wrap Points" / "Load Wrap Points", the owner's exception of 2026-10-31), buying, orders, checkout, cart, prices, licences, activation, upgrades, trials, credits, subscriptions or payment -- and accepting terms / an agreement. Delete, remove, login and update buttons are pressed (money-only since 2026-11-19). Returns a picture of the window and the dialogs that are open; never answers a window it opened. See [Pressing one named button](#pressing-one-named-button-click_ui_button) |
+| `click_ui_button` | Press ONE named button of a CC5 window, dialog or dock panel with Qt's `click()` (works while the Windows screen is locked), or one entry of its drop-down menu (`menu_item`). Refuses ambiguous, hidden or disabled buttons and every button about spending money: points, buying, orders (not "sort order", "draw order", "render order", "layer order", "order by"), checkout, cart, prices, licences, licence / product activation (a feature switch such as "Activate Physics" is pressed), upgrades, trials, credits, subscriptions or payment -- and accepting terms / an agreement. Exact allowlisted controls are pressed although one such word matches: Body Wrap's "Generate Wrap Points" and "Align Points" and its menu entries "Save Wrap Points" / "Load Wrap Points" (2026-10-31), and the main window's check box "Activate Expression Wrinkles" (2026-11-19). Delete, remove, login and update buttons are pressed (money-only since 2026-11-19). Returns a picture of the window and the dialogs that are open; never answers a window it opened. See [Pressing one named button](#pressing-one-named-button-click_ui_button) |
 | `select_ui_tab` | List the tabs of a tab widget (QTabWidget / QTabBar) inside a CC5 window, dialog or dock panel (`list_only`: objectName, class, current index and every tab's index, text, tool tip, enabled / visible; read-only), or bring ONE tab to the front with Qt's `setCurrentIndex()`, named by `index`, `text` or `tooltip` (icon-only tabs have no text). Use it when `click_ui_button` says a button is hidden because its tab is not in front. Never presses a button, answers a dialog or opens a menu. Refuses ambiguous, hidden or disabled tabs, tabs whose text or tool tip trips the `click_ui_button` word list, and any switch while a money / agreement window (purchase, licence, terms, ...) or a foreign modal window is open. Returns the index before and after, the tab labels, a picture of the window and the open dialogs. See [Bringing one tab to the front](#bringing-one-tab-to-the-front-select_ui_tab) |
+| `set_ui_value` | Read ONE input widget inside a CC5 window, dialog or dock panel (`read_only`: kind, value, minimum / maximum, step, item list; read-only), or set its value with the Qt setters that send the normal change signals: QSpinBox / QDoubleSpinBox and subclasses (number), QSlider (whole number), QComboBox (exact item text, or index), QLineEdit (text), QCheckBox / radio button (true / false). The widget is named by its exact `object_name`, plus `ancestor` (objectName or class of a widget it sits in) when several share the name, e.g. the SubD level boxes `qtSpinBox` in `qtRenderComboSpinBox` / `qtPreviewComboSpinBox`. Never presses a button, answers a dialog or opens a menu. Refuses ambiguous, hidden, disabled or read-only widgets, password boxes, a value of the wrong type or outside the range (nothing is clamped: the range is reported), widgets (and combo items) whose text, objectName, tool tip or label trips the `click_ui_button` word rules (same allowlist: "Activate Expression Wrinkles" may be ticked), and any change while a money / agreement window or a foreign modal window is open. Returns the value before and after, a picture of the window and the open dialogs. See [Setting one input widget](#setting-one-input-widget-set_ui_value) |
 
 #### MetaHuman (2)
 | Tool | Description |
@@ -457,7 +491,9 @@ bridge can press a button for you: tool `click_ui_button`, route `POST /ui/click
 - the window or button matches nothing, or more than one **visible** thing (hidden buttons never count and are never pressed);
 - the button or menu entry is disabled or hidden;
 - its text, objectName or tool tip is about **spending money** (any case, also with spaces or tags inside the word):
-  `point` / `ポイント`, `buy` / `購入` / `purchase`, `order`, `checkout`, `cart`, `credit` / `クレジット`, `subscribe`, `pay` / `payment` / `支払`, `price`, `upgrade`, `trial`, `activate`, `license` / `licence` / `ライセンス`;
+  `point` / `ポイント`, `buy` / `購入` / `purchase`, `checkout`, `cart`, `credit` / `クレジット`, `subscribe`, `pay` / `payment` / `支払`, `price`, `upgrade`, `trial`, `license` / `licence` / `ライセンス`;
+  `order` as in "Order now", "Place order", "Your order", "Order summary", "Order ID", "Orders" (not in "sort order", "draw order", "render order", "layer order", "order by", "in order to");
+  `activate` / `activation` / `deactivate` when the text, objectName or tool tip also has a licence / product word (`licen...`, `product`, `serial`, `key`, `online`, `purchas...`, `trial`, `subscri...`, `account`, `code`) or when the label names nothing else ("Activate", "Activation", "Activate now"). A feature switch such as "Activate Physics" or "Deactivate Mirror" is pressed;
 - or about **accepting terms / an agreement / a EULA** (`terms`, `agree...`, `eula`, `規約`, `同意`);
 - a window about money or an agreement (purchase, licence, activation, terms, ...) is open;
 - a modal window is open and the button is not in it (a person could not press it either);
@@ -465,8 +501,17 @@ bridge can press a button for you: tool `click_ui_button`, route `POST /ui/click
 
 **Not refused any more (2026-11-19, the owner's money-only rule):** `delete` / `削除` / `remove`, login / sign in,
 update, register, account, unlock and the like. Such a button is pressed when you name it, and a login or update
-window no longer blocks other presses. `order`, `cart`, `price`, `pay` and `credit` are matched as whole words in
-window text (so "Cartoon" and "Border" are fine, but a label such as "Sort Order" is refused).
+window no longer blocks other presses. `order`, `cart`, `price`, `pay` and `credit` are matched as whole words
+(so "Cartoon", "Border" and "Reorder" are fine), and since the second batch of 2026-11-19 "Sort Order", "Draw
+Order", "Render Order", "Layer Order", "Order by" and "in order to" are fine too, in a button and in a window.
+
+**The allowlist (exact controls):** the controls in the table under
+[Local changes in this fork](#local-changes-in-this-fork) are pressed although one refusal word matches: in the
+window titled "Body Wrap" the buttons "Generate Wrap Points" / "Align Points" and the menu entries "Save Wrap
+Points" / "Load Wrap Points" (they place, save and load wrap points; no AI points are used), and in the main
+window the check box `qtActiveWrinkleCheckBox` "Activate Expression Wrinkles". A control with a similar name stays
+refused, every other money word still refuses the control, and nothing is pressed while a money or agreement
+window is open.
 
 **The start-up box:** CC5's own box "Unsaved project data found. Would you like to update your project
 with the unsaved changes?" (buttons OK / Cancel) appears after CC5 was closed without saving. Press it with
@@ -517,6 +562,57 @@ forwards. Example: `{"window": "MainWindow", "tab_widget": "qtAttributeRootTab",
 (The window name and the index in this example are placeholders: read the real ones from `list_only` and
 `find_ui_widgets` on your CC5. Not yet run against a live CC5.)
 
+### Setting one input widget (set_ui_value)
+
+Added on 2026-11-19 (this fork, second batch). `click_ui_button` presses buttons only. Modify > Character > SubD
+Levels > Render stayed at 0 after subdividing because nothing could type a number into its spin box, and the two
+SubD boxes share one objectName (`qtSpinBox`; their parents are `qtRenderComboSpinBox` and
+`qtPreviewComboSpinBox`). Tool `set_ui_value`, route `POST /ui/value`, reads or sets ONE input widget and does
+nothing else.
+
+| Argument | Meaning |
+|----------|---------|
+| `window` (required) | Title of the CC5 window, dialog or dock panel (case-insensitive), or its objectName; same rules as `click_ui_button` |
+| `object_name` (required) | Exact objectName of the input widget. Find it with `find_ui_widgets` (its `path` shows what the widget sits in) |
+| `ancestor` | objectName or class of a widget the wanted one sits in (any level up to the window). Needed when several visible widgets share `object_name` |
+| `value` | What to set (required unless `read_only`): a number for a spin box or slider, the exact item text (string) or the item index (number) for a combo box, a string for a line edit, `true` / `false` for a check box or radio button |
+| `read_only` | Only read (default false): kind, current value, minimum / maximum, step, decimals, item list, labels. Nothing changes, no job |
+| `wait_ms` | How long to wait after the change before the picture (default 500, 200-15000) |
+| `screenshot`, `max_width` | PNG of the window and of every open dialog after a change (default true, 900 px) |
+
+| Widget | How it is set (so CC5 reacts as if a person had changed it) |
+|--------|--------------------------------------------------------------|
+| QSpinBox / QDoubleSpinBox and subclasses (QSpinBoxEx) | `setValue`, then the `editingFinished` signal. A custom spin box PySide has no class for is reached through its Qt `value` / `minimum` / `maximum` properties |
+| QSlider / QAbstractSlider | a drag: `setSliderDown(true)`, `setSliderPosition`, `setSliderDown(false)` |
+| QComboBox | `setCurrentIndex`, then the `activated` / `textActivated` signals |
+| QLineEdit | `setText`, then `textEdited` and `editingFinished`. A text the validator does not accept is taken back |
+| QCheckBox / radio button | `click()` when the state differs (`setChecked` for a tri-state box) |
+
+**Reading** is answered at once (no job). What a person typed into a text box is not read back (the same rule as
+`find_ui_widgets`): the text is returned only when it is a plain number, otherwise only its length.
+
+**Setting** runs as a job on CC5's main thread and reports the value before and after, the range, a picture of
+the window and the dialogs that are open. A widget that already has the value is left alone (nothing is sent).
+**It refuses (and changes nothing) when:**
+
+- the window matches nothing or more than one window;
+- no supported input widget has that objectName (under `ancestor`), or more than one **visible** one has it (the candidates are listed with what they sit in; hidden widgets never count and are never changed);
+- the widget is disabled or read-only, is the inner text box of a spin box or combo box, or is a password box;
+- the value has the wrong type, or is **outside the widget's minimum / maximum**: nothing is clamped silently, the range is reported;
+- the combo text matches no item or several, the index is not there, or the item is disabled;
+- the widget's own text, objectName, tool tip, placeholder or label (a QLabel whose buddy it is, or the up to three QLabels that sit directly in the same parent), or the combo item to select, has a money / agreement word: the same check as `click_ui_button`, with the same allowlist (so `qtActiveWrinkleCheckBox` "Activate Expression Wrinkles" may be ticked);
+- a window about money or an agreement (purchase, licence, terms, ...) is open;
+- a modal window is open and the widget is not in it.
+
+It never presses a push button, never answers a dialog and never opens a menu; a window that the change opens is
+reported with its picture and left alone. The checks live in the bridge (`cc5_uivalue.py`); the MCP tool only
+forwards. Example (SubD render level):
+`{"window": "MainWindow", "object_name": "qtSpinBox", "ancestor": "qtRenderComboSpinBox", "read_only": true}`,
+then the same with `"value": 2` instead of `read_only`. Expression wrinkles: `select_ui_tab` to the Expression
+Wrinkles tab, then `{"window": "MainWindow", "object_name": "qtActiveWrinkleCheckBox", "value": true}`.
+(Not yet run against a live CC5: which signals CC5's own widgets listen to is not known, so read the value back
+and look at the picture. If CC5 does not react to a set value, say so in FORK-FIXES.md.)
+
 ### ボタンを 1 つ押す(click_ui_button、日本語)
 
 2026-10-30 に足しました。Windows の画面に鍵がかかっている間は、マウスのクリックが効きません。そのため、Body Wrap の
@@ -526,9 +622,14 @@ forwards. Example: `{"window": "MainWindow", "tab_widget": "qtAttributeRootTab",
 - **指定のしかた**: `window` に窓・小窓・ドックの題名(大文字小文字は問わない)か objectName。ボタンは `object_name`(完全一致)か
   `text`(見えている文字の完全一致。大文字小文字と `&` は問わない)、または両方。▾ のメニューの中の項目は `menu_item` に項目の文字を書く。
 - **断るとき(何も押さない)**: 当たるものがない・見えているものが 2 つ以上ある。隠れている・灰色(無効)のボタンや項目。
-  文字・objectName・ツールチップに、お金にかかわる次の語があるもの: `point`/`ポイント`、`buy`/`購入`/`purchase`、`order`、
-  `checkout`、`cart`、`credit`/`クレジット`、`subscribe`、`pay`/`支払`、`price`、`upgrade`、`trial`(体験版)、`activate`、
-  `license`/`licence`/`ライセンス`。規約・同意(terms / agreement / EULA)にかかわるもの。お金や規約の窓(購入・ライセンス・
+  文字・objectName・ツールチップに、お金にかかわる次の語があるもの: `point`/`ポイント`、`buy`/`購入`/`purchase`、
+  `checkout`、`cart`、`credit`/`クレジット`、`subscribe`、`pay`/`支払`、`price`、`upgrade`、`trial`(体験版)、
+  `license`/`licence`/`ライセンス`。`order` は「Order now」「Place order」「Orders」などの注文の意味のときだけ断ります
+  (「Sort Order」「Draw Order」「Render Order」「Layer Order」「Order by」は押します)。`activate` は、ライセンスや製品の語
+  (license、product、serial、key、online、account、code など)といっしょのときと、「Activate」だけのときに断ります
+  (「Activate Physics」のような機能のスイッチは押します)。決まった少数のボタンは、語が当たっても押します(許可リスト:
+  Body Wrap の「Generate Wrap Points」「Align Points」「Save / Load Wrap Points」、メインの窓のチェックボックス
+  「Activate Expression Wrinkles」)。規約・同意(terms / agreement / EULA)にかかわるもの。お金や規約の窓(購入・ライセンス・
   規約など)が開いている間。モーダルの窓が開いていて、押すボタンがその中にないとき。▾ のメニューを持つボタンで `menu_item` がないとき。
 - **2026-11-19 から断らないもの**: `delete`/`削除`/`remove`、ログイン、更新(update)など、お金と規約のほかの語。持ち主が
   「お金にかかわるものだけ断る」と決めました。削除や上書きのボタンも押されるので、先に窓をよく読んでください。
@@ -544,7 +645,7 @@ forwards. Example: `{"window": "MainWindow", "tab_widget": "qtAttributeRootTab",
 | `CC5_DEV_MODE` | `0` | Development helpers in the bridge plugin: `GET /reload` without a token and the full `GET /api` route list. Accepts `1`, `true` or `yes`. Read from the environment CC5 starts from. It does **not** enable code execution |
 | `CC5_ALLOW_EXEC` | *(unset)* | Enables `exec_python` (`POST /exec/python`) and the silent Export Head routes (`POST /export/head_mh/silent/*`). Accepts `1`, `true` or `yes`. Read **only by the bridge plugin**, from the environment CC5 was started from; the MCP server does not read it -- see [Security](#security) |
 | `CC5_RELOAD_SECRET` | *(empty)* | Auth token for the `/reload` endpoint. If set, requests must include `X-Reload-Token` header |
-| `CC5_REQUEST_TIMEOUT_MS` | `30000` | HTTP request timeout in milliseconds (MCP server side) |
+| `CC5_REQUEST_TIMEOUT_MS` | `30000` | HTTP request timeout in milliseconds (MCP server side). `export_fbx`, `export_obj` and `save_project` do not use it: they wait up to 300 s (plus 10 s) for CC5, and say plainly when no answer came in that time (CC5 may still be working: check the output folder) |
 | `CC5_ROOT` | `C:\Program Files\Reallusion\Character Creator 5` | CC5 installation path (used for default avatar loading) |
 | `CC5_DIALOG_WATCH` | `1` | `0` disables the dialog warning that is prepended to tool results |
 | `CC5_DIALOG_WATCH_IGNORE_HUB` | *(unset)* | `1` hides Reallusion Hub-only dialogs from the warning |
@@ -570,7 +671,7 @@ npm run test:coverage # With coverage report
 npm run test:py      # Bridge plugin security tests (Python 3.10+, no CC5 needed)
 ```
 
-Current suite: 813 Vitest tests in 24 files, plus 345 Python tests (bridge security, route tables, and the UI automation with a fake Qt in `tests/python/fake_qt.py`).
+Current suite: 876 Vitest tests in 26 files, plus 470 Python tests (bridge security, route tables, and the UI automation with a fake Qt in `tests/python/fake_qt.py`).
 
 ### Hot-Reload the Python Plugin
 
@@ -595,7 +696,7 @@ cc5-mcp-server/
 │   ├── cc5-bridge.ts       # HTTP client for CC5 bridge
 │   ├── types.ts            # Type definitions
 │   ├── util.ts             # Shared utilities (bridgeCall wrapper)
-│   ├── tools/              # MCP tool definitions (25 files, 101 tools total)
+│   ├── tools/              # MCP tool definitions (26 files, 102 tools total)
 │   │   ├── morph.ts        # Morph search, adjust, reset (5 tools)
 │   │   ├── scene.ts        # Scene/avatar management, viewport, subdivision (7 tools)
 │   │   ├── asset.ts        # Asset loading / FBX export (2 tools)
@@ -619,6 +720,7 @@ cc5-mcp-server/
 │   │   ├── framed-capture.ts # capture_framed_crop (1 tool)
 │   │   ├── ui-click.ts     # click_ui_button (1 tool)
 │   │   ├── ui-tab.ts       # select_ui_tab (1 tool)
+│   │   ├── ui-value.ts     # set_ui_value (1 tool)
 │   │   ├── ui-common.ts    # Shared helpers of the UI tools (job waiting, window text)
 │   │   └── workflow.ts     # Text-only workflow routes (26 tools)
 │   └── resources/
@@ -633,6 +735,7 @@ cc5-mcp-server/
 │   ├── cc5_content.py      # Preset list / apply
 │   ├── cc5_uiclick.py      # Press one named button (/ui/click) and its refusals
 │   ├── cc5_uitab.py        # List tabs / bring one tab to the front (/ui/tab) and its refusals
+│   ├── cc5_uivalue.py      # Read / set one input widget (/ui/value) and its refusals
 │   └── config.json         # Plugin configuration
 ├── scripts/ui_client.py    # Stdlib client for the /ui routes (job polling, window PNGs)
 ├── tests/                  # Vitest unit tests; tests/python = bridge + UI automation tests

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { CC5Bridge } from "../src/cc5-bridge.js";
+import { CC5Bridge, CC5StillWorkingError, LONG_REQUEST_TIMEOUT_MS } from "../src/cc5-bridge.js";
 
 type Reply = { status: number; body: unknown };
 
@@ -93,6 +93,7 @@ describe("request shapes", () => {
     ["uiCaptureCrop", () => bridge.uiCaptureCrop({ size: 3600 }), "/ui/capture_crop", { size: 3600 }],
     ["uiClick", () => bridge.uiClick({ window: "Body Wrap", text: "Paste" }), "/ui/click", { window: "Body Wrap", text: "Paste" }],
     ["uiSelectTab", () => bridge.uiSelectTab({ window: "MainWindow", tab_widget: "qtAttributeRootTab", index: 2 }), "/ui/tab", { window: "MainWindow", tab_widget: "qtAttributeRootTab", index: 2 }],
+    ["uiSetValue", () => bridge.uiSetValue({ window: "MainWindow", object_name: "qtSpinBox", ancestor: "qtRenderComboSpinBox", value: 2 }), "/ui/value", { window: "MainWindow", object_name: "qtSpinBox", ancestor: "qtRenderComboSpinBox", value: 2 }],
     ["uiJob", () => bridge.uiJob("preset-1"), "/ui/job", { job_id: "preset-1" }],
   ])("%s posts to %s", async (_name, call, path, body) => {
     const fetchFn = stubFetch([ok({ success: true })]);
@@ -107,6 +108,74 @@ describe("request shapes", () => {
     const fetchFn = stubFetch([ok({ success: true, windows: [] })]);
     await bridge.uiWindows();
     expect(JSON.parse(fetchFn.mock.calls[0][1].body)).toEqual({});
+  });
+});
+
+describe("long commands: export_fbx, export_obj, save_project", () => {
+  /** fetch that never answers; it rejects with an AbortError when the request's own timer aborts it. */
+  function hangingFetch(): ReturnType<typeof vi.fn> {
+    const fn = vi.fn().mockImplementation((_url: string, options: { signal: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        options.signal.addEventListener("abort", () =>
+          reject(Object.assign(new Error("This operation was aborted"), { name: "AbortError" })));
+      }));
+    vi.stubGlobal("fetch", fn);
+    return fn;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("the limit is 300 s and the default stays 30 s", () => {
+    expect(LONG_REQUEST_TIMEOUT_MS).toBe(300_000);
+  });
+
+  it.each([
+    ["exportFbx", () => bridge.exportFbx("D:/out/a.fbx"), "FBX export to D:/out/a.fbx"],
+    ["wfExportObj", () => bridge.wfExportObj("D:/out/a.obj"), "OBJ export to D:/out/a.obj"],
+    ["wfSaveProject", () => bridge.wfSaveProject("D:/out/a.ccProject"), "saving the project to D:/out/a.ccProject"],
+    ["wfSaveProject in place", () => bridge.wfSaveProject(), "saving the project in place"],
+  ])("%s is not aborted after 30 s, and after 310 s says that CC5 may still be working", async (_name, start, what) => {
+    vi.useFakeTimers();
+    hangingFetch();
+    let outcome: unknown = "pending";
+    start().then((value) => { outcome = value; }, (err) => { outcome = err; });
+    await vi.advanceTimersByTimeAsync(299_000);
+    expect(outcome).toBe("pending");                         // the old 30 s limit would have aborted long ago
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(outcome).toBeInstanceOf(CC5StillWorkingError);
+    const message = (outcome as Error).message;
+    expect(message).toContain(`No answer from CC5 after 310 s (${what})`);
+    expect(message).toContain("CC5 may still be working");
+    expect(message).toContain("Check the output folder");
+    expect(message).toContain("Do NOT send the request again yet");
+    expect(message).not.toContain("aborted");
+  });
+
+  it("any other call still gives up after the 30 s default", async () => {
+    vi.useFakeTimers();
+    hangingFetch();
+    let outcome: unknown = "pending";
+    bridge.getAvatars().then((value) => { outcome = value; }, (err) => { outcome = err; });
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect((outcome as Error).name).toBe("AbortError");
+  });
+
+  it("the bridge's own 504 (an older plugin gives up after 30 s) gets the same plain message", async () => {
+    stubFetch([busy]);
+    const err = await bridge.exportFbx("D:/out/a.fbx").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(CC5StillWorkingError);
+    expect((err as Error).message).toContain("CC5 may still be working");
+  });
+
+  it("an answer in time and a real failure are passed on unchanged", async () => {
+    stubFetch([ok({ success: true, target_tool: "UE5" })]);
+    expect(await bridge.exportFbx("D:/out/a.fbx")).toEqual({ success: true, target_tool: "UE5" });
+    stubFetch([{ status: 500, body: "export failed" }]);
+    await expect(bridge.exportFbx("D:/out/a.fbx")).rejects.toThrow("CC5 bridge error (500)");
+    stubFetch([{ status: 500, body: "export failed" }]);
+    await expect(bridge.exportFbx("D:/out/a.fbx")).rejects.not.toBeInstanceOf(CC5StillWorkingError);
   });
 });
 

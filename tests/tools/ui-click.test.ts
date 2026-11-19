@@ -37,6 +37,17 @@ describe("click_ui_button – registration", () => {
       expect(description).toContain(word);
     }
     expect(description).toContain("delete, remove, login and update buttons ARE pressed");
+    // the description must never say again that such buttons are refused (the money-only rule of 2026-11-19)
+    expect(description).toContain("Nothing else is refused by word");
+    expect(description.match(/delete|remove|login|update/g)).toHaveLength(4);
+    for (const phrase of ["'order' (but not 'sort order', 'draw order', 'render order', 'layer order', 'order by')",
+      "'activate' next to a licence / product / serial / key / online / account word or standing alone",
+      "feature switches such as 'Activate Physics'", "'Generate Wrap Points'", "'Align Points'",
+      "'Save Wrap Points' / 'Load Wrap Points'", "'Activate Expression Wrinkles' (qtActiveWrinkleCheckBox)",
+      "set_ui_value"]) {
+      expect(server.tool.mock.calls[0][1] + JSON.stringify(Object.values(schema()).map((f) => (f as { description?: string }).description)))
+        .toContain(phrase);
+    }
     expect(description).not.toContain("削除");
   });
 

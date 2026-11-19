@@ -218,7 +218,8 @@ class RefusalTest(TabTestCase):
         cases = (("Buy Content", ""), ("", "<b>Pur</b>chase more"), ("License", ""), ("Activation", ""),
                  ("AI Points", ""), ("Order", ""), ("", "Checkout"), ("Cart", ""), ("Credits", ""), ("", "Prices"),
                  ("Free Trial", ""), ("", "Upgrade"), ("Payment", ""), ("Terms", ""), ("", "License Agreement"),
-                 ("", "x" * 300 + " subscribe"))
+                 ("", "x" * 300 + " subscribe"), ("Product Activation", ""), ("", "Activate"), ("", "Your orders"),
+                 ("Order", "Sort"))
         for text, tip in cases:
             with self.subTest(text=text, tip=tip):
                 self.tabs._tabs[1] = (text, tip)
@@ -226,7 +227,9 @@ class RefusalTest(TabTestCase):
         self.assertEqual(cc5_uiclick.deny_reason("Modify", "Texture"), None)
 
     def test_delete_login_and_update_tabs_are_selected_now(self) -> None:
-        for text, tip in (("Delete", ""), ("", "Remove layers"), ("Log In", ""), ("", "Update"), ("Account", "")):
+        for text, tip in (("Delete", ""), ("", "Remove layers"), ("Log In", ""), ("", "Update"), ("Account", ""),
+                          ("Sort Order", ""), ("", "Layer order"), ("Activate Physics", ""),
+                          ("", "Expression Wrinkles: activate and edit")):
             with self.subTest(text=text, tip=tip):
                 self.tabs._tabs[1] = (text, tip)
                 self.tabs._current = 0

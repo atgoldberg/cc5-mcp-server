@@ -52,6 +52,8 @@ describe("select_ui_tab – registration", () => {
       expect(description).toContain(word);
     }
     for (const gone of ["delete", "remove", "login", "update", "削除"]) expect(description).not.toContain(gone);
+    expect(description).toContain("'order' (but not 'sort order', 'draw order', 'render order', 'layer order', 'order by')");
+    expect(description).toContain("'activate' next to a licence / product / serial / key / online / account word or standing alone");
   });
 
   it("schema: window is required, names are bounded, index is 0-999, wait_ms is 200-15000", () => {

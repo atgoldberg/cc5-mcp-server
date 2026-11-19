@@ -28,7 +28,9 @@ layer". Everything goes through the cc5 MCP tools below (or `scripts/ui_client.p
    how a wrong window gets pressed.
 4. `click_ui_button` presses ONE button you name. CC5 refuses (and presses nothing) any button or menu entry whose
    text, objectName or tool tip mentions money -- points / ポイント, buy / 購入 / purchase, order, checkout, cart,
-   credit / クレジット, subscribe, pay / 支払, price, upgrade, trial, activate, license / licence / ライセンス -- or
+   credit / クレジット, subscribe, pay / 支払, price, upgrade, trial, activate, license / licence / ライセンス
+   (narrower since 2026-11-19: "order" not in "sort / draw / render / layer order" or "order by"; "activate" only
+   next to a licence / product word or standing alone, so "Activate Physics" is pressed) -- or
    accepting terms / an agreement / a EULA; hidden, disabled or ambiguous buttons; anything while a money or
    agreement window is open; anything outside an open modal window. Delete, remove, login and update buttons are
    NOT refused any more (2026-11-19). **A refusal is final**: never get around it (another route, `exec_python`, the
@@ -102,7 +104,8 @@ wait, Mipmap, Loading) go away by themselves; question windows need the owner. C
 ## Facts and pitfalls (learned 2026-10-26)
 
 - Presets go on with `RFileIO.LoadFile(path)` with the avatar SELECTED (the tools do that). `.ccAvatarPreset`,
-  `.rlEyelashElement`, `.ccSkinGenPreset` and `.rlWrinkle` (expression wrinkles) work; `.ccProject` / `.ccAvatar` / FBX are refused on purpose.
+  `.rlEyelashElement` and `.ccSkinGenPreset` work; `.ccProject` / `.ccAvatar` / FBX are refused on purpose. `.rlWrinkle`
+  is refused too: `LoadFile` reports an error for it in CC 5.2 (switch wrinkles on from the Expression Wrinkles tab).
 - SkinGen layer eye button: **checked = hidden**. Layer widgets are rebuilt on every selection, so tools wait
   between steps; do not click by hand while a job runs.
 - The opacity box is `qtBlendOpacityHorizontalSliderEx > qtSpinBox` (0-100). It had never been tried on a real

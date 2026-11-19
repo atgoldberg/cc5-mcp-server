@@ -47,7 +47,8 @@ describe("registration", () => {
     expect(description).toContain("NEVER pressed");
     expect(description).toContain("spending money");
     expect(description).toContain("click_ui_button");
-    expect(description).toContain(".rlWrinkle");
+    expect(description).toContain("not .rlWrinkle either");
+    expect(description).toContain("set_ui_value");
     expect(description).toContain("never .ccProject / .ccAvatar / .fbx");
     expect(description).toContain("licence");
   });

@@ -140,12 +140,41 @@ class RouteTableTest(UiTestCase):
         self.assertEqual(srv.POST_ROUTES["/ui/skingen/layer"], "ui_modules_missing")
         self.assertEqual(srv.POST_ROUTES["/ui/click"], "ui_modules_missing")
         self.assertEqual(srv.POST_ROUTES["/ui/tab"], "ui_modules_missing")
+        self.assertEqual(srv.POST_ROUTES["/ui/value"], "ui_modules_missing")
         res = srv.ACTION_MAP["ui_modules_missing"]({})
         self.assertFalse(res["success"])
         self.assertIn("cc5_content.py", res["error"])
         self.assertIn("cc5_uiclick.py", res["error"])
         self.assertIn("cc5_uitab.py", res["error"])
+        self.assertIn("cc5_uivalue.py", res["error"])
         self.assertIn("cc5_uiview.py", res["error"])
+
+    def test_exports_and_saves_are_waited_for_longer_than_other_commands(self) -> None:
+        import server
+
+        self.assertEqual((server.DEFAULT_COMMAND_TIMEOUT, server.LONG_COMMAND_TIMEOUT), (30.0, 300.0))
+        self.assertEqual(server.LONG_ACTIONS, {"export_fbx", "wf_export_obj", "wf_save_project"})
+        for action in server.LONG_ACTIONS:
+            self.assertEqual(server.command_timeout(action), 300.0, action)
+        for action in ("get_avatars", "ui_click", "ui_value", "exec_python", "import_fbx", "wf_trigger_menu"):
+            self.assertEqual(server.command_timeout(action), 30.0, action)
+        srv = self.patched()
+        self.assertEqual(server.POST_ROUTES["/export/fbx"], "export_fbx")
+        self.assertEqual(srv.POST_ROUTES["/workflow/export_obj"], "wf_export_obj")
+        self.assertEqual(srv.POST_ROUTES["/workflow/save"], "wf_save_project")
+        waits: list[float] = []
+
+        class NeverSet:
+            def wait(self, timeout: float) -> bool:
+                waits.append(timeout)
+                return False
+
+        with mock.patch.object(server.threading, "Event", NeverSet), \
+                mock.patch.object(server, "command_queue", mock.Mock()):
+            self.assertEqual(server._execute_sync("export_fbx", {"output_path": "a.fbx"})[0], 504)
+            self.assertEqual(server._execute_sync("get_avatars", {})[0], 504)
+            self.assertEqual(server._execute_sync("get_avatars", {}, timeout=1.5)[0], 504)
+        self.assertEqual(waits, [300.0, 30.0, 1.5])
 
     def test_load_survives_a_broken_module(self) -> None:
         real_import = __import__("importlib").import_module

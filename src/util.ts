@@ -14,6 +14,16 @@ export function isEnvFlagEnabled(name: string, env: NodeJS.ProcessEnv = process.
 }
 
 /**
+ * The text for an error a bridge call threw. A long command (export, save) that got no answer in time
+ * (CC5StillWorkingError, src/cc5-bridge.ts) explains itself: CC5 is running and may still finish.
+ */
+export function bridgeErrorText(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof Error && err.name === "CC5StillWorkingError") return message;
+  return `CC5 bridge error: ${message}. Is CC5 running with the MCP Bridge plugin?`;
+}
+
+/**
  * Wraps a bridge call with try/catch, returning a structured MCP content response.
  * Prevents unhandled errors from propagating to the MCP SDK.
  * Logs the full error (including stack) to stderr so MCP stdio is not corrupted.
@@ -27,13 +37,7 @@ export async function bridgeCall<T>(
     return { content: [{ type: "text" as const, text: formatSuccess(result) }] };
   } catch (err: unknown) {
     console.error("[CC5 Bridge] bridgeCall caught error:", err);
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      content: [{
-        type: "text" as const,
-        text: `CC5 bridge error: ${message}. Is CC5 running with the MCP Bridge plugin?`,
-      }],
-    };
+    return { content: [{ type: "text" as const, text: bridgeErrorText(err) }] };
   }
 }
 
@@ -63,9 +67,6 @@ export async function bridgeCallRich<T>(
     return { content: await format(result) };
   } catch (err: unknown) {
     console.error("[CC5 Bridge] bridgeCallRich caught error:", err);
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      content: [textContent(`CC5 bridge error: ${message}. Is CC5 running with the MCP Bridge plugin?`)],
-    };
+    return { content: [textContent(bridgeErrorText(err))] };
   }
 }

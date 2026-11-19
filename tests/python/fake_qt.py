@@ -172,8 +172,12 @@ class AbstractButton(Widget):
     def setChecked(self, value: bool) -> None:
         self._checked = bool(value)
 
+    auto_toggle = False                      # True: click() flips the checked state, as a real check box does
+
     def click(self) -> None:
         self.clicks += 1
+        if self.auto_toggle:
+            self._checked = not self._checked
         if self.on_click:
             self.on_click()
 
@@ -219,9 +223,26 @@ class LineEdit(Widget):
     def __init__(self, parent: Widget, text: str = "", echo: int = 0, placeholder: str = "", name: str = "") -> None:
         super().__init__(name=name, parent=parent)
         self._text, self._echo, self._placeholder = text, echo, placeholder
+        self._read_only, self._max_length = False, 32767
+        self.accepts: Callable[[str], bool] = lambda _text: True     # the validator
+        self.set_calls: list[str] = []
+        self.textEdited, self.editingFinished = Signal(), Signal()
 
     def text(self) -> str:
         return self._text
+
+    def setText(self, text: str) -> None:
+        self.set_calls.append(text)
+        self._text = str(text)
+
+    def hasAcceptableInput(self) -> bool:
+        return bool(self.accepts(self._text))
+
+    def isReadOnly(self) -> bool:
+        return self._read_only
+
+    def maxLength(self) -> int:
+        return self._max_length
 
     def echoMode(self) -> int:
         return self._echo
@@ -348,11 +369,22 @@ class ActionMenu(Menu):
         return self._actions
 
 
-class SpinBox(Widget):
-    def __init__(self, parent: Widget, name: str = "", value: int = 100, lo: int = 0, hi: int = 100) -> None:
-        super().__init__(name=name, parent=parent)
-        self._value, self._lo, self._hi = value, lo, hi
+class AbstractSpinBox(Widget):
+    """QAbstractSpinBox stand-in. On its own it is a custom C++ spin box PySide has no class for: the
+    value is reached through the Qt properties only (property / setProperty)."""
+
+    def __init__(self, parent: Widget, name: str = "", visible: bool = True) -> None:
+        super().__init__(name=name, parent=parent, visible=visible)
         self.editingFinished = Signal()
+
+
+class SpinBox(AbstractSpinBox):
+    def __init__(self, parent: Widget, name: str = "", value: int = 100, lo: int = 0, hi: int = 100,
+                 visible: bool = True) -> None:
+        super().__init__(parent, name=name, visible=visible)
+        self._value, self._lo, self._hi = value, lo, hi
+        self.set_calls: list[Any] = []
+        self.on_change: Callable[[Any], None] | None = None
 
     def value(self) -> int:
         return self._value
@@ -363,17 +395,111 @@ class SpinBox(Widget):
     def maximum(self) -> int:
         return self._hi
 
+    def singleStep(self) -> int:
+        return 1
+
     def setValue(self, v: int) -> None:
+        self.set_calls.append(v)
+        new = max(self._lo, min(self._hi, int(v)))
+        if new != self._value:
+            self._value = new
+            if self.on_change:
+                self.on_change(new)
+
+
+class DoubleSpinBox(AbstractSpinBox):
+    """QDoubleSpinBox stand-in (in Qt, as here, it is not a QSpinBox): rounds to its decimals."""
+
+    def __init__(self, parent: Widget, name: str = "", value: float = 0.0, lo: float = 0.0, hi: float = 1.0,
+                 decimals: int = 2) -> None:
+        super().__init__(parent, name=name)
+        self._value, self._lo, self._hi, self._decimals = value, lo, hi, decimals
+        self.set_calls: list[float] = []
+
+    def value(self) -> float:
+        return self._value
+
+    def minimum(self) -> float:
+        return self._lo
+
+    def maximum(self) -> float:
+        return self._hi
+
+    def singleStep(self) -> float:
+        return 0.1
+
+    def decimals(self) -> int:
+        return self._decimals
+
+    def setValue(self, v: float) -> None:
+        self.set_calls.append(v)
+        self._value = round(max(self._lo, min(self._hi, float(v))), self._decimals)
+
+
+class Slider(Widget):
+    """QSlider stand-in; calls records what was called, in order (a drag is down, position, up)."""
+
+    def __init__(self, parent: Widget, name: str = "", value: int = 0, lo: int = 0, hi: int = 100) -> None:
+        super().__init__(name=name, parent=parent)
+        self._value, self._lo, self._hi = value, lo, hi
+        self.calls: list[tuple[str, Any]] = []
+
+    def value(self) -> int:
+        return self._value
+
+    def minimum(self) -> int:
+        return self._lo
+
+    def maximum(self) -> int:
+        return self._hi
+
+    def singleStep(self) -> int:
+        return 1
+
+    def setValue(self, v: int) -> None:
+        self.calls.append(("setValue", v))
+        self._value = max(self._lo, min(self._hi, int(v)))
+
+    def setSliderDown(self, down: bool) -> None:
+        self.calls.append(("down", down))
+
+    def setSliderPosition(self, v: int) -> None:
+        self.calls.append(("position", v))
         self._value = max(self._lo, min(self._hi, int(v)))
 
 
 class ComboBox(Widget):
-    def __init__(self, parent: Widget, name: str = "", text: str = "") -> None:
+    def __init__(self, parent: Widget, name: str = "", text: str = "", items: "list[str] | None" = None,
+                 current: int = 0) -> None:
         super().__init__(name=name, parent=parent)
         self._text = text
+        self._items = list(items or [])
+        self._current = current if self._items else -1
+        self.set_calls: list[int] = []
+        self.on_change: Callable[[int], None] | None = None
+        self.activated, self.textActivated = Signal(), Signal()
 
     def currentText(self) -> str:
-        return self._text
+        return self._items[self._current] if 0 <= self._current < len(self._items) else self._text
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemText(self, index: int) -> str:
+        return self._items[index] if 0 <= index < len(self._items) else ""
+
+    def currentIndex(self) -> int:
+        return self._current
+
+    def isEditable(self) -> bool:
+        return False
+
+    def setCurrentIndex(self, index: int) -> None:
+        self.set_calls.append(index)
+        if 0 <= index < len(self._items) and index != self._current:
+            self._current = index
+            if self.on_change:
+                self.on_change(index)
 
 
 class _Selection:
@@ -581,6 +707,10 @@ def make_qt() -> types.SimpleNamespace:
         QTextEdit=TextEdit,
         QPlainTextEdit=PlainTextEdit,
         QSpinBox=SpinBox,
+        QDoubleSpinBox=DoubleSpinBox,
+        QAbstractSpinBox=AbstractSpinBox,
+        QAbstractSlider=Slider,
+        QSlider=Slider,
         QComboBox=ComboBox,
         QTableWidget=Table,
         QDockWidget=DockWidget,

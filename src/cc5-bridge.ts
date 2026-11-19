@@ -101,6 +101,8 @@ import type {
   UiClickArgs,
   UiTabArgs,
   UiTabReply,
+  UiValueArgs,
+  UiValueReply,
   ExecPythonResult,
 } from "./types.js";
 
@@ -111,6 +113,31 @@ const REQUEST_TIMEOUT_MS = Number.isFinite(_rawTimeout) && _rawTimeout > 0 && _r
   : 30_000;
 /** Job polls wait a little longer than the bridge's own 30 s limit, so its "CC5 is busy" 504 arrives first. */
 const JOB_POLL_TIMEOUT_MS = Math.max(REQUEST_TIMEOUT_MS, 30_000) + 10_000;
+/**
+ * Exports and saves can take minutes: a real FBX export took longer than the 30 s default (2026-11-19) and the
+ * tool said "This operation was aborted" although CC5 finished and wrote the files. Only these calls wait this
+ * long; CC5_REQUEST_TIMEOUT_MS (the default for everything else) is not changed. The bridge waits
+ * LONG_COMMAND_TIMEOUT (300 s, cc5-plugin/server.py) for the same commands; this side waits a little longer
+ * so the bridge's own "still busy" 504 arrives first.
+ */
+export const LONG_REQUEST_TIMEOUT_MS = 300_000;
+const LONG_CLIENT_TIMEOUT_MS = Math.max(REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS) + 10_000;
+
+/**
+ * A long command (export, save) got no answer in time. CC5 was NOT asked to stop: it may still be working
+ * and may still write the file. util.bridgeCall shows the message as it is.
+ */
+export class CC5StillWorkingError extends Error {
+  constructor(what: string, seconds: number) {
+    super(
+      `No answer from CC5 after ${seconds} s (${what}). This is not a failure report: CC5 may still be working ` +
+        "and may still finish and write the file(s). Do NOT send the request again yet. Check the output folder " +
+        "for the file(s) (name, size, time), and look at CC5 with list_cc5_windows or list_dialogs: a window " +
+        "may be waiting for an answer.",
+    );
+    this.name = "CC5StillWorkingError";
+  }
+}
 
 export class CC5Bridge {
   private baseUrl: string;
@@ -181,6 +208,24 @@ export class CC5Bridge {
       return data.result;
     } finally {
       clearTimeout(timeout);
+    }
+  }
+
+  /**
+   * POST for a command that can take minutes (export, save): waits LONG_REQUEST_TIMEOUT_MS instead of the
+   * default. When no answer comes in that time (our abort, or the bridge's 504), throws CC5StillWorkingError,
+   * which says plainly that CC5 may still be working and that the output folder should be checked.
+   */
+  private async longRequest<T>(path: string, body: unknown, what: string): Promise<T> {
+    const started = Date.now();
+    try {
+      return await this.request<T>(path, "POST", body, false, LONG_CLIENT_TIMEOUT_MS);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isAbort(err) || message.startsWith("CC5 bridge error (504)")) {
+        throw new CC5StillWorkingError(what, Math.round((Date.now() - started) / 1000));
+      }
+      throw err;
     }
   }
 
@@ -287,7 +332,7 @@ export class CC5Bridge {
     if (extra.motion_range !== undefined) body.motion_range = extra.motion_range;
     if (extra.convert_image_format !== undefined) body.convert_image_format = extra.convert_image_format;
     if (extra.texture_size !== undefined) body.texture_size = extra.texture_size;
-    return this.request<ExportFbxResult>("/export/fbx", "POST", body);
+    return this.longRequest<ExportFbxResult>("/export/fbx", body, `FBX export to ${outputPath}`);
   }
 
   // --- Mesh-to-MetaHuman pipeline ---
@@ -763,7 +808,7 @@ export class CC5Bridge {
   async wfSaveProject(filePath?: string): Promise<WorkflowSaveResult> {
     const body: Record<string, unknown> = {};
     if (filePath !== undefined) body.file_path = filePath;
-    return this.request<WorkflowSaveResult>("/workflow/save", "POST", body);
+    return this.longRequest<WorkflowSaveResult>("/workflow/save", body, `saving the project${filePath !== undefined ? ` to ${filePath}` : " in place"}`);
   }
 
   async wfExportObj(
@@ -772,12 +817,12 @@ export class CC5Bridge {
     withMaterials: boolean = true,
     sel: WorkflowItemSelector = {}
   ): Promise<WorkflowExportObjResult> {
-    return this.request<WorkflowExportObjResult>("/workflow/export_obj", "POST", {
+    return this.longRequest<WorkflowExportObjResult>("/workflow/export_obj", {
       ...sel,
       file_path: filePath,
       current_pose: currentPose,
       with_materials: withMaterials,
-    });
+    }, `OBJ export to ${filePath}`);
   }
 
   async wfMeshOffset(
@@ -939,6 +984,11 @@ export class CC5Bridge {
   /** The list of tabs comes back at once (listed=true); selecting a tab starts a job (job_id). */
   async uiSelectTab(args: UiTabArgs): Promise<UiTabReply> {
     return this.ui<UiTabReply>("/ui/tab", args);
+  }
+
+  /** Reads one input widget (read_only: the reply is the widget, no job) or starts the job that sets its value. */
+  async uiSetValue(args: UiValueArgs): Promise<UiValueReply> {
+    return this.ui<UiValueReply>("/ui/value", args);
   }
 
   async uiJob<T extends OperationResult = OperationResult>(jobId: string): Promise<UiJobStatus<T>> {

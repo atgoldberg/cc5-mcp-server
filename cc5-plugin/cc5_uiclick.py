@@ -15,14 +15,19 @@ What it refuses (nothing is pressed; the reason comes back as HTTP 400):
   * a window name or button that matches nothing, or more than one VISIBLE thing (hidden buttons
     never count and are never pressed);
   * a disabled or hidden button or menu entry;
-  * (exception, owner 2026-10-31: inside the window "Body Wrap" the buttons with exactly the text
-    "Generate Wrap Points" / "Align Points", and the menu entries "Save Wrap Points" / "Load Wrap Points",
-    are pressed; see POINT_EXCEPTION_BUTTONS / POINT_EXCEPTION_MENU_ENTRIES)
   * a button or menu entry whose text, objectName or tool tip contains a DENY_WORDS word (points,
-    buy, purchase, licence, activate, upgrade, credit, subscribe, pay and the Japanese words) or a
+    buy, purchase, licence, upgrade, credit, subscribe, pay and the Japanese words) or a
     word of cc5_ui.forbidden_reason (order, checkout, cart, price, trial, terms / agreement, ...).
     Since 2026-11-19 only money and agreements are refused: delete, remove, login and update buttons
-    ARE pressed (the policy is written down once, at cc5_ui.MONEY_STEMS);
+    ARE pressed (the policy is written down once, at cc5_ui.MONEY_STEMS). Two words are narrower on a
+    control than in a window (cc5_ui NARROWED RULE 1 and 2): "order" is not refused in "sort order",
+    "draw order", "render order", "layer order", "order by", "in order to"; "activate" is refused only
+    next to a licence / product word or when the label names nothing else ("Activate", "Activation"),
+    so "Activate Physics" is pressed;
+  * (exceptions: the exact controls of the ALLOWLIST table below are pressed although one named word
+    matches: Body Wrap's "Generate Wrap Points" / "Align Points" buttons and "Save Wrap Points" /
+    "Load Wrap Points" menu entries, owner 2026-10-31, and the Modify panel's "Activate Expression
+    Wrinkles" check box, owner 2026-11-19)
   * any click while a window about money or an agreement is open (purchase, licence, activation, terms, ...);
   * a button outside the modal window that is open (a person could not press it either);
   * a button that opens a drop-down menu when no menu_item is given (the menu would stay open).
@@ -33,6 +38,7 @@ The checks live here, in CC5, because any local program can call the bridge: the
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import unicodedata
 from typing import Any, Callable, Iterator
@@ -63,16 +69,64 @@ DENY_WORDS: tuple[str, ...] = (
 _DENY_NEEDLES = tuple((word, cc5_ui.norm(word)) for word in DENY_WORDS)
 _COMPACT_MIN_CHARS = 5
 
-# The owner's exception (2026-10-31, "いいよ、進めて"): the two Body Wrap steps that only place wrap
-# points on the mesh (they do not use AI points) may be pressed although their text says "points".
-# Exact, whole-text match, and only inside the window titled "Body Wrap"; every OTHER deny word in
-# the text, objectName or tool tip still refuses, and so does any similar name ("AI Points", ...).
-POINT_EXCEPTION_WINDOW = "body wrap"
-POINT_EXCEPTION_BUTTONS = frozenset({"generate wrap points", "align points"})
-# 2026-10-31 (second request, same owner OK "道具の決まりも変えていい"): the 💾 menu's two entries that
-# save / load the wrap points to a file. menu_item must be exactly one of these.
-POINT_EXCEPTION_MENU_ENTRIES = frozenset({"save wrap points", "load wrap points"})
 _POINT_WORDS = frozenset({"point", "ポイント"})
+_ACTIVATION_WORDS = frozenset({cc5_ui.ACTIVATION_WORD})
+
+
+# --- THE ALLOWLIST: exact controls that may be used although ONE named refusal word matches ----------
+#
+# How to read an entry: in the window (window_title: its title, compared like every name here, i.e.
+# case-insensitive; and / or window_object_name: its exact objectName; the window is the TOP-LEVEL window the
+# control sits in, so a control in a dock panel is matched by the main window), the control of this `kind`
+# with exactly this objectName AND exactly this visible text may ignore the refusal words in `ignore`.
+#   * kind "control": a button, a check box or an input widget; text is its own visible text.
+#   * kind "menu_entry": one entry of a button's drop-down menu; text is the entry's text, object_name the
+#     objectName of the button that holds the menu. The words are then ignored for the entry AND for the
+#     button that holds it.
+#   * ignore: names from DENY_WORDS ("point", "ポイント") or cc5_ui.ACTIVATION_WORD ("activat").
+# What an entry does NOT do:
+#   * it never widens a word rule: a control with a similar name or text stays refused;
+#   * every OTHER money / agreement word in the control's text, objectName or tool tip still refuses it;
+#   * it only switches off the control's own word check. Nothing is pressed while a money or agreement
+#     window is open (blocking_reason), and hidden / disabled / ambiguous controls stay refused.
+# object_name None means "any objectName": ONLY the four Body Wrap entries of 2026-10-31 have it, because
+# their real objectNames were never written down (they matched on window title and text from the start).
+# Every new entry must name the objectName. Add an entry only with the owner's word; note date and reason.
+@dataclasses.dataclass(frozen=True)
+class AllowEntry:
+    window_title: str | None
+    window_object_name: str | None
+    kind: str                                   # "control" | "menu_entry"
+    object_name: str | None
+    text: str
+    ignore: frozenset[str]
+    why: str
+
+
+ALLOWLIST: tuple[AllowEntry, ...] = (
+    # Owner, 2026-10-31 ("いいよ、進めて"): the two Body Wrap steps that only place wrap points on the mesh
+    # (they do not use AI points). "AI Points" and the like stay refused (cc5_ui.MONEY_STEMS "ai point").
+    AllowEntry("body wrap", None, "control", None, "generate wrap points", _POINT_WORDS,
+               "places wrap points on the mesh; no AI points are used"),
+    AllowEntry("body wrap", None, "control", None, "align points", _POINT_WORDS,
+               "aligns the wrap points; no AI points are used"),
+    # Owner, 2026-10-31 (second request, "道具の決まりも変えていい"): the 💾 menu's two entries that save /
+    # load the wrap points to a file.
+    AllowEntry("body wrap", None, "menu_entry", None, "save wrap points", _POINT_WORDS,
+               "saves the wrap points to a file"),
+    AllowEntry("body wrap", None, "menu_entry", None, "load wrap points", _POINT_WORDS,
+               "loads the wrap points from a file"),
+    # Owner, 2026-11-19 (FORK-FIXES.md): Modify panel > Expression Wrinkles tab. Turns the wrinkle system on
+    # for the open character; no licence, no cost.
+    AllowEntry(None, "MainWindow", "control", "qtActiveWrinkleCheckBox", "activate expression wrinkles",
+               _ACTIVATION_WORDS, "switches expression wrinkles on for the open character"),
+)
+
+# The old names of the Body Wrap exception, read from the table (kept for readers of older notes).
+POINT_EXCEPTION_WINDOW = "body wrap"
+POINT_EXCEPTION_BUTTONS = frozenset(e.text for e in ALLOWLIST if e.window_title == "body wrap" and e.kind == "control")
+POINT_EXCEPTION_MENU_ENTRIES = frozenset(e.text for e in ALLOWLIST
+                                         if e.window_title == "body wrap" and e.kind == "menu_entry")
 
 # CC5's start-up box below. Until 2026-11-19 only its Cancel button could be pressed (its text says
 # "update", which was a refused word then). "update" is allowed now, so both buttons can be pressed like
@@ -108,7 +162,9 @@ def deny_reason(*parts: Any, skip_words: frozenset[str] = frozenset()) -> str | 
 
     Each part (text, objectName, tool tip) is checked on its own, with tags removed both with and
     without a space ('<b>Del</b>ete'), so words cannot hide across parts or inside rich text.
-    skip_words names deny words that are not counted (only the owner's point exception uses it).
+    skip_words names words that are not counted: only an ALLOWLIST entry gives them (allowlist_ignores).
+    "activate" follows cc5_ui's NARROWED RULE 2 for controls (cc5_ui.activation_reason), not the
+    anywhere-match of the other DENY_WORDS; "order" follows NARROWED RULE 1.
     """
     for part in parts:
         if not part:
@@ -117,11 +173,12 @@ def deny_reason(*parts: Any, skip_words: frozenset[str] = frozenset()) -> str | 
             text = cc5_ui.norm(variant)
             compact = re.sub(r"[\W_]+", "", text)
             for word, needle in _DENY_NEEDLES:
-                if word in skip_words:
+                if word in skip_words or word == "activate":
                     continue
                 if needle in text or (len(needle) >= _COMPACT_MIN_CHARS and needle in compact):
                     return word
-    return cc5_ui.forbidden_reason(*parts)
+    ignore = _ACTIVATION_WORDS if cc5_ui.ACTIVATION_WORD in skip_words else frozenset()
+    return cc5_ui.forbidden_reason(*parts, control=True, ignore=ignore)
 
 
 # --- matching -----------------------------------------------------------------------------
@@ -279,13 +336,23 @@ def find_menu_entry(menu: Any, item: str) -> tuple[Any | None, str | None]:
     return entry, None
 
 
-def _point_exception(button: Any, scope: Any, menu_item: str | None) -> bool:
-    """True for the owner's Body Wrap buttons / menu entries: exact text, inside the window titled "Body Wrap"."""
-    if scope is None or label_key(_title(_top(scope))) != POINT_EXCEPTION_WINDOW:
-        return False
-    if menu_item is not None:
-        return label_key(menu_item) in POINT_EXCEPTION_MENU_ENTRIES
-    return label_key(cc5_ui.label_text(button)) in POINT_EXCEPTION_BUTTONS
+def allowlist_ignores(scope: Any | None, object_name: Any, text: Any, kind: str = "control") -> frozenset[str]:
+    """The refusal words the ALLOWLIST lets this exact control ignore (empty for every other control).
+    scope: the window / panel the control was found in; object_name and text: the control's own (for
+    kind "menu_entry": the holding button's objectName and the entry's text)."""
+    if scope is None:
+        return frozenset()
+    top = _top(scope)
+    title, window_name, wanted = label_key(_title(top)), _call(top, "objectName", ""), label_key(text)
+    words: set[str] = set()
+    for entry in ALLOWLIST:
+        if (entry.kind == kind and entry.text == wanted
+                and (entry.window_title is not None or entry.window_object_name is not None)
+                and entry.window_title in (None, title)
+                and entry.window_object_name in (None, window_name)
+                and entry.object_name in (None, object_name)):
+            words |= entry.ignore
+    return frozenset(words)
 
 
 def _target_problem(button: Any, menu_item: str | None,
@@ -293,7 +360,9 @@ def _target_problem(button: Any, menu_item: str | None,
     """(what to press: the button or one of its menu entries, refusal)."""
     if not _call(button, "isEnabled", True):
         return None, f"the button {_button_desc(button)} is disabled (greyed out) and cannot be pressed now"
-    skip = _POINT_WORDS if _point_exception(button, scope, menu_item) else frozenset()
+    name = _call(button, "objectName", "")
+    skip = (allowlist_ignores(scope, name, menu_item, "menu_entry") if menu_item is not None
+            else allowlist_ignores(scope, name, cc5_ui.label_text(button)))
     word = deny_reason(cc5_ui.label_text(button), _call(button, "objectName", ""), _call(button, "toolTip", ""),
                        skip_words=skip)
     if word:

@@ -89,7 +89,9 @@ export function registerUiTabTools(server: McpServer, bridge: CC5Bridge, wait: W
       "tab and does nothing else: it never presses a button, answers a dialog or opens a menu. CC5 refuses, " +
       "and changes nothing, when: no or more than one VISIBLE tab widget matches; no or more than one tab " +
       "matches; the tab is disabled or hidden; its text or tool tip is about spending money -- points, buy, " +
-      "purchase, order, checkout, cart, credit, subscribe, pay, price, upgrade, trial, activate, licence (or " +
+      "purchase, checkout, cart, credit, subscribe, pay, price, upgrade, trial, licence, 'order' (but not " +
+      "'sort order', 'draw order', 'render order', 'layer order', 'order by'), 'activate' next to a licence / " +
+      "product / serial / key / online / account word or standing alone (or " +
       "ポイント 購入 ライセンス クレジット 支払) -- or about accepting terms / an agreement; a window about " +
       "those (purchase, licence, activation, terms) is open; a modal window is open and the tab widget is " +
       "not in it. After the switch it waits wait_ms, then returns the index " +

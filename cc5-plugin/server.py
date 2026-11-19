@@ -495,8 +495,24 @@ def _validate_params(action: str, params: dict) -> str | None:
     return None
 
 
-def _execute_sync(action: str, params: dict, timeout: float = 30.0) -> tuple[int, Any]:
+# How long the bridge waits for CC5's main thread to finish a command before it answers 504.
+# A real FBX export took longer than 30 s (2026-11-19): the reply was lost although CC5 finished and
+# wrote the files. Exports and saves get LONG_COMMAND_TIMEOUT; everything else keeps the 30 s. The
+# MCP server waits a little longer than this for the same commands (src/cc5-bridge.ts). The bridge
+# handles one connection at a time, so /health answers late while such a command is being waited for.
+DEFAULT_COMMAND_TIMEOUT = 30.0
+LONG_COMMAND_TIMEOUT = 300.0
+LONG_ACTIONS = frozenset({"export_fbx", "wf_export_obj", "wf_save_project"})
+
+
+def command_timeout(action: str) -> float:
+    return LONG_COMMAND_TIMEOUT if action in LONG_ACTIONS else DEFAULT_COMMAND_TIMEOUT
+
+
+def _execute_sync(action: str, params: dict, timeout: float | None = None) -> tuple[int, Any]:
     """Queue a command, wait for main-thread execution, return (http_status, result)."""
+    if timeout is None:
+        timeout = command_timeout(action)
     # Opt-in gate. Checked here, on the single path every GET and POST action
     # takes, so no route table entry (even one hot-patched later) can skip it.
     if action in EXEC_GATED_ACTIONS and not exec_allowed():

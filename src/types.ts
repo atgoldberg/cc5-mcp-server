@@ -1038,6 +1038,80 @@ export interface UiTabReply extends UiJobStart {
   hidden_skipped?: number;
 }
 
+/** Body of POST /ui/value: read ONE input widget of a window, or set its value. */
+export interface UiValueArgs {
+  window: string;
+  object_name: string;
+  ancestor?: string;
+  value?: number | string | boolean;
+  read_only?: boolean;
+  wait_ms?: number;
+  screenshot?: boolean;
+  max_width?: number;
+}
+
+/** A widget's value: number (spin box, slider), boolean (check box), text, or a combo box's current item. */
+export type UiValue = number | string | boolean | { index: number; text?: string } | null;
+
+export interface UiValueWidget {
+  object_name?: string;
+  class?: string;
+  /** int | double | spin | slider | combo | text | check */
+  kind?: string;
+  enabled?: boolean;
+  path?: string;
+  value?: UiValue;
+  /** The text of a line edit is returned only when it is a plain number. */
+  value_hidden?: boolean;
+  text_length?: number;
+  minimum?: number | null;
+  maximum?: number | null;
+  single_step?: number;
+  decimals?: number;
+  count?: number;
+  items?: string[];
+  editable?: boolean;
+  read_only?: boolean;
+  max_length?: number;
+  text?: string;
+  tooltip?: string;
+  labels?: string[];
+  note?: string;
+}
+
+/** The reply of /ui/value: the widget itself (read_only=true, no job), or the start of a job (job_id). */
+export interface UiValueReply extends UiJobStart {
+  read_only?: boolean;
+  window?: string;
+  widget?: UiValueWidget;
+  hidden_skipped?: number;
+}
+
+/** Result of a /ui/value job (one value was set with the widget's Qt setter; nothing was pressed). */
+export interface UiValueResult extends OperationResult {
+  window?: string;
+  widget?: UiValueWidget;
+  requested?: number | string | boolean;
+  value_before?: UiValue;
+  value_before_hidden?: boolean;
+  value_after?: UiValue;
+  value_after_hidden?: boolean;
+  changed?: boolean;
+  minimum?: number | null;
+  maximum?: number | null;
+  signals_sent?: string[];
+  set_returned?: boolean;
+  waited_ms?: number;
+  hidden_skipped?: number;
+  window_open?: boolean;
+  png_base64?: string;
+  png_size?: number[];
+  screenshot_error?: string;
+  /** The dialogs open after the change (none of them is answered). */
+  dialogs?: UiWindowInfo[];
+  note?: string;
+}
+
 /** Result of a /ui/tab job (one tab was selected with setCurrentIndex; nothing was pressed). */
 export interface UiTabResult extends OperationResult {
   window?: string;

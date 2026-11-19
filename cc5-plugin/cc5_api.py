@@ -9917,16 +9917,16 @@ def wf_physics_set_collision(
         return {"success": False, "error": str(e)}
 
 
-# --- Qt UI helper modules (cc5_ui, cc5_uiview, cc5_skingen, cc5_content, cc5_uiclick, cc5_uitab) ---
+# --- Qt UI helper modules (cc5_ui, cc5_uiview, cc5_skingen, cc5_content, cc5_uiclick, cc5_uitab, cc5_uivalue) ---
 # Routes under /ui/. They live in their own files next to this one; a missing or broken file turns
 # its routes into a clear error and never stops the bridge. They are re-imported on every
 # _auto_patch_server() call, so GET /reload picks up edits of any of them.
 
-_UI_MODULES = ("cc5_ui", "cc5_uiview", "cc5_skingen", "cc5_content", "cc5_uiclick", "cc5_uitab")
+_UI_MODULES = ("cc5_ui", "cc5_uiview", "cc5_skingen", "cc5_content", "cc5_uiclick", "cc5_uitab", "cc5_uivalue")
 _UI_ROUTE_PATHS = (
     "/ui/windows", "/ui/widgets", "/ui/job", "/ui/capture_crop",
     "/ui/skingen/state", "/ui/skingen/editor", "/ui/skingen/layer",
-    "/ui/preset/list", "/ui/preset/apply", "/ui/click", "/ui/tab",
+    "/ui/preset/list", "/ui/preset/apply", "/ui/click", "/ui/tab", "/ui/value",
 )
 
 
@@ -9949,8 +9949,8 @@ def _ui_modules_missing(body: dict[str, Any] | None = None) -> dict[str, Any]:
         "success": False,
         "error": (
             "The Qt UI helper modules are not installed next to cc5_api.py (or failed to load; see the "
-            "CC5 console). Copy cc5_ui.py, cc5_uiview.py, cc5_skingen.py, cc5_content.py, cc5_uiclick.py and "
-            "cc5_uitab.py into the plugin folder (install-plugin.ps1 does) and call GET /reload."
+            "CC5 console). Copy cc5_ui.py, cc5_uiview.py, cc5_skingen.py, cc5_content.py, cc5_uiclick.py, "
+            "cc5_uitab.py and cc5_uivalue.py into the plugin folder (install-plugin.ps1 does) and call GET /reload."
         ),
     }
 

@@ -86,9 +86,15 @@ export function parseScan(stdout: string): DialogScan {
 // MONEY (2026-11-19: the owner relaxed the list to money only): spending or committing to spend.
 // Login, password, account, update, install, delete, overwrite, replace and unsaved were flagged
 // before that date and are not any more.
+// "order" (2026-11-19, as in cc5_ui.py NARROWED RULE 1): money as in "Order now" / "Your order" / "orders",
+// not in "sort order", "draw order", "render order", "layer order", "order by", "in order to". The pieces of a
+// dialog are joined with a line break, so a phrase must stand in one piece. "activat" stays as it is: this
+// list judges windows, and windows are where licence activation prompts appear.
+export const ORDER_PATTERN =
+  /\borders\b|(?<!\b(?:sort|draw|render|layer) )\border\b(?! by\b)(?!(?<=\bin order) to\b)/i;
 export const MONEY_PATTERNS: RegExp[] = [
   /licen[sc]/i, /activat/i, /\bserial/i, /\btrial/i,
-  /purchas/i, /\bbuy/i, /\bbought\b/i, /checkout/i, /\bcarts?\b/i, /\borders?\b/i,
+  /purchas/i, /\bbuy/i, /\bbought\b/i, /checkout/i, /\bcarts?\b/i, ORDER_PATTERN,
   /\bpay\b/i, /\bpaid\b/i, /payment/i, /\bpric(?:e|es|ing)\b/i, /\bcredits?\b/i, /subscri/i, /upgrad/i,
   /\b(?:da|ai) points?\b/i,
   /ライセンス/, /購入/, /支払/, /決済/, /課金/, /クレジット/, /アクティベ/, /有効化/, /体験版/, /試用/, /アップグレード/,

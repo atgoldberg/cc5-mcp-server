@@ -265,15 +265,14 @@ class ApplyTest(UiTestCase):
             self.assertIn("avatar not found", cc5_content.ui_apply_preset({"file_path": path})["error"])
 
     def test_only_listed_preset_types_can_be_applied(self) -> None:
-        for name in ("scene.ccProject", "char.ccAvatar", "char.iAvatar", "x.ini", "x.iso", "x.fbx", "x.iProject"):
+        for name in ("scene.ccProject", "char.ccAvatar", "char.iAvatar", "x.ini", "x.iso", "x.fbx", "x.iProject",
+                     "f.rlWrinkle", "g.RLWRINKLE"):         # LoadFile reports an error for wrinkle presets (CC 5.2)
             self.assertIsNotNone(cc5_content.check_preset_path(self.file(name)), name)
-        for name in ("a.ccSkinGenPreset", "b.rlEyelashElement", "c.ccAvatarPreset", "d.iMtl", "e.rlHairStyle",
-                     "f.rlWrinkle", "g.RLWRINKLE"):
+        for name in ("a.ccSkinGenPreset", "b.rlEyelashElement", "c.ccAvatarPreset", "d.iMtl", "e.rlHairStyle"):
             self.assertIsNone(cc5_content.check_preset_path(self.file(name)), name)
 
     def test_the_list_has_no_type_that_replaces_the_scene_or_the_character(self) -> None:
-        self.assertIn(".rlwrinkle", cc5_content.ALLOWED_APPLY_EXTS)
-        for ext in (".ccproject", ".iproject", ".ccavatar", ".iavatar", ".fbx", ".obj", ".rlhead", ".ccscene"):
+        for ext in (".rlwrinkle", ".ccproject", ".iproject", ".ccavatar", ".iavatar", ".fbx", ".obj", ".rlhead", ".ccscene"):
             self.assertNotIn(ext, cc5_content.ALLOWED_APPLY_EXTS)
 
     def test_network_and_stream_paths_are_refused(self) -> None:
